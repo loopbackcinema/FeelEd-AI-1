@@ -10,18 +10,25 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Close dropdown when clicking outside
+    // This effect now correctly adds the event listener only when the dropdown is open.
+    // This prevents a race condition where the click to open the menu might also be
+    // caught by the "click outside" logic, preventing it from ever appearing.
     useEffect(() => {
+        if (!isDropdownOpen) {
+            return;
+        }
+
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsDropdownOpen(false);
             }
         };
+
         document.addEventListener("mousedown", handleClickOutside);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [dropdownRef]);
+    }, [isDropdownOpen]);
 
   return (
     <header className="py-6 flex justify-between items-center">
@@ -40,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         <div className="flex-none">
             {user && (
                  <div className="relative" ref={dropdownRef}>
-                    <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 p-2 rounded-full hover:bg-gray-200/50 transition-colors">
+                    <button onClick={() => setIsDropdownOpen(prev => !prev)} className="flex items-center gap-3 p-2 rounded-full hover:bg-gray-200/50 transition-colors">
                         <img src={user.picture} alt={user.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md"/>
                         <span className="font-semibold text-gray-700 hidden sm:inline">{user.name}</span>
                         <svg className={`w-5 h-5 text-gray-500 transition-transform hidden sm:inline ${isDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
