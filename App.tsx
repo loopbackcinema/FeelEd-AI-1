@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
 import { Loader } from './components/Loader';
@@ -54,6 +54,7 @@ const App: React.FC = () => {
   const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [envError, setEnvError] = useState<string | null>(null);
+  const wasLoginTriggeredBySubmit = useRef<boolean>(false);
 
 
   useEffect(() => {
@@ -132,7 +133,78 @@ const App: React.FC = () => {
     // This will be caught by the nearest Error Boundary
     throw error;
   }
+
+  const startStoryGeneration = useCallback(async () => {
+    setApiKeyError(null);
+    setEnvError(null);
+
+    if (!topic.trim() || !grade || !language || !emotion || !userRole) {
+        const formError = new Error("Please fill out all fields before generating a story.");
+        formError.name = "Incomplete Form";
+        setError(formError);
+        return;
+    }
+    
+    setIsLoading(true);
+    setStory(null);
+    setAudioUrl(null);
+    setStreamingStory({});
+
+    try {
+      const handleStoryUpdate = (partialStory: Partial<Story>) => {
+        setStreamingStory(prev => ({ ...prev, ...partialStory }));
+      };
+
+      const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, handleStoryUpdate);
+      setStory(result.story);
+      setAudioUrl(result.audioUrl);
+      
+      if (!user) {
+          const newCount = guestStoryCount + 1;
+          setGuestStoryCount(newCount);
+          localStorage.setItem('guestStoryCount', String(newCount));
+      }
+
+    } catch (err: any) {
+        console.error(err);
+
+        // Special handling for invalid API keys to avoid the error boundary and show an inline message.
+        if (err.message && (err.message.includes("API key not valid") || err.message.includes("API Key must be set"))) {
+            setHasApiKey(false); // Force the user to re-select a key.
+            setApiKeyError("Your selected API key is invalid or has been revoked. Please select a new, valid key to continue.");
+        } else {
+            // Handle all other errors with the main error boundary.
+            let title = "An Unexpected Error Occurred";
+            let message = "Something went wrong. Please try again. If the problem persists, contact support.";
+
+            if (err instanceof AppError) {
+                message = err.message;
+                if (err instanceof NetworkError) title = "Network Connection Error";
+                else if (err instanceof APIError) title = "AI Service Error";
+                else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
+                else if (err instanceof TTSError) title = "Audio Narration Failed";
+            } else if (err.message) {
+                message = err.message;
+            }
+
+            const appError = new Error(message);
+            appError.name = title;
+            setError(appError);
+        }
+        
+    } finally {
+      setIsLoading(false);
+      setStreamingStory(null);
+    }
+  }, [topic, grade, language, emotion, userRole, user, guestStoryCount]);
   
+  useEffect(() => {
+    if (user && wasLoginTriggeredBySubmit.current) {
+        wasLoginTriggeredBySubmit.current = false;
+        startStoryGeneration();
+    }
+  }, [user, startStoryGeneration]);
+
   const handleLoginSuccess = (credential: string) => {
     try {
       const payload: GoogleJwtPayload = JSON.parse(atob(credential.split('.')[1]));
@@ -172,9 +244,9 @@ const App: React.FC = () => {
       try {
         await window.aistudio.openSelectKey();
         
-        // After the dialog closes, re-verify the selection status directly from the source of truth.
-        const isKeyNowSelected = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(isKeyNowSelected);
+        // Optimistically assume the key is now selected to avoid race conditions.
+        // The error handling in handleSubmit will catch any persistent issues.
+        setHasApiKey(true);
 
       } catch (e) {
         console.error("Error with select key dialog:", e);
@@ -186,75 +258,16 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!user && guestStoryCount >= 1) {
+        wasLoginTriggeredBySubmit.current = true;
         setShowLoginModal(true);
         return;
     }
     
-    setApiKeyError(null); // Clear previous API key errors on a new submission.
-    setEnvError(null);
-
-    if (!topic.trim() || !grade || !language || !emotion || !userRole) {
-        const formError = new Error("Please fill out all fields before generating a story.");
-        formError.name = "Incomplete Form";
-        setError(formError);
-        return;
-    }
-    
-    setIsLoading(true);
-    setStory(null);
-    setAudioUrl(null);
-    setStreamingStory({});
-
-    try {
-      const handleStoryUpdate = (partialStory: Partial<Story>) => {
-        setStreamingStory(prev => ({ ...prev, ...partialStory }));
-      };
-
-      const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, handleStoryUpdate);
-      setStory(result.story);
-      setAudioUrl(result.audioUrl);
-      
-      if (!user) {
-          const newCount = guestStoryCount + 1;
-          setGuestStoryCount(newCount);
-          localStorage.setItem('guestStoryCount', String(newCount));
-      }
-
-    } catch (err: any) {
-        console.error(err);
-
-        // Special handling for invalid API keys to avoid the error boundary and show an inline message.
-        if (err.message && (err.message.includes("API key not valid") || err.message.includes("provide an API key"))) {
-            setHasApiKey(false); // Force the user to re-select a key.
-            setApiKeyError("Your selected API key is invalid or has been revoked. Please select a new, valid key to continue.");
-        } else {
-            // Handle all other errors with the main error boundary.
-            let title = "An Unexpected Error Occurred";
-            let message = "Something went wrong. Please try again. If the problem persists, contact support.";
-
-            if (err instanceof AppError) {
-                message = err.message;
-                if (err instanceof NetworkError) title = "Network Connection Error";
-                else if (err instanceof APIError) title = "AI Service Error";
-                else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
-                else if (err instanceof TTSError) title = "Audio Narration Failed";
-            } else if (err.message) {
-                message = err.message;
-            }
-
-            const appError = new Error(message);
-            appError.name = title;
-            setError(appError);
-        }
-        
-    } finally {
-      setIsLoading(false);
-      setStreamingStory(null);
-    }
+    startStoryGeneration();
   };
 
   const handleReset = () => {
