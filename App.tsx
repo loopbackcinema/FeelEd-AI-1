@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -53,7 +49,7 @@ const App: React.FC = () => {
     () => Number(localStorage.getItem('guestStoryCount') || 0)
   );
   
-  // State is now simplified. The app always verifies the key with the environment on load.
+  // The API key state now leverages sessionStorage for persistence within a session.
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
   const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
@@ -79,6 +75,13 @@ const App: React.FC = () => {
   }, []);
 
   const checkApiKey = useCallback(async () => {
+      // Trust sessionStorage first to avoid unnecessary checks and race conditions.
+      if (sessionStorage.getItem('apiKeySelected') === 'true') {
+          setHasApiKey(true);
+          setIsCheckingApiKey(false);
+          return;
+      }
+
       if (!window.aistudio) {
           console.warn("`window.aistudio` not available for API key check.");
           setHasApiKey(false);
@@ -87,6 +90,9 @@ const App: React.FC = () => {
       }
       try {
           const keySelected = await window.aistudio.hasSelectedApiKey();
+          if (keySelected) {
+              sessionStorage.setItem('apiKeySelected', 'true');
+          }
           setHasApiKey(keySelected);
       } catch (e) {
           console.error("Error checking API key status:", e);
@@ -172,12 +178,11 @@ const App: React.FC = () => {
     } catch (err: any) {
         console.error(err);
 
-        // Special handling for invalid API keys to avoid the error boundary and show an inline message.
         if (err instanceof InvalidApiKeyError) {
+            sessionStorage.removeItem('apiKeySelected'); // Clear session state on invalid key
             setHasApiKey(false); // Force the user to re-select a key.
             setApiKeyError(err.message);
         } else {
-            // Handle all other errors with the main error boundary.
             let title = "An Unexpected Error Occurred";
             let message = "Something went wrong. Please try again. If the problem persists, contact support.";
 
@@ -205,9 +210,12 @@ const App: React.FC = () => {
   useEffect(() => {
     if (user && wasLoginTriggeredBySubmit.current) {
         wasLoginTriggeredBySubmit.current = false;
-        startStoryGeneration();
+        // Ensure key is checked before auto-starting generation
+        if (hasApiKey || userRole === 'Student') {
+            startStoryGeneration();
+        }
     }
-  }, [user, startStoryGeneration]);
+  }, [user, startStoryGeneration, hasApiKey, userRole]);
 
   const handleLoginSuccess = (credential: string) => {
     try {
@@ -233,12 +241,12 @@ const App: React.FC = () => {
     if (window.google) {
         window.google.accounts.id.disableAutoSelect();
     }
-    // Clear all session-related data from storage.
     localStorage.removeItem('feelEdUser');
     localStorage.removeItem('guestStoryCount');
+    sessionStorage.removeItem('apiKeySelected'); // Clear API key session state
     setUser(null);
     setGuestStoryCount(0);
-    setHasApiKey(false); // Reset state
+    setHasApiKey(false);
   };
 
   const handleSelectKey = async () => {
@@ -248,14 +256,12 @@ const App: React.FC = () => {
       try {
         await window.aistudio.openSelectKey();
         
-        // The key selection dialog has closed. We will now attempt to proceed.
+        // After the dialog closes, assume success and update session storage.
+        sessionStorage.setItem('apiKeySelected', 'true');
         setHasApiKey(true); // This will close the modal.
 
-        // If a topic exists, it's likely the user was trying to generate a story.
-        // We'll automatically trigger the generation for a seamless experience.
+        // If a topic exists, automatically trigger generation for a seamless experience.
         if (topic.trim()) {
-            // Use a short delay to allow React to re-render and close the modal
-            // before the loading state takes over the UI.
             setTimeout(() => {
                 startStoryGeneration();
             }, 100);
@@ -279,10 +285,10 @@ const App: React.FC = () => {
       setShowLoginModal(true);
       return;
     }
-
-    // Explicitly check for API key before proceeding for relevant users.
-    // This acts as a safeguard and ensures the modal is the primary CTA.
+    
     if (user && userRole !== 'Student' && !hasApiKey) {
+      // The modal is already showing, so clicking the disabled generate button does nothing.
+      // This check is a safeguard.
       return;
     }
 
