@@ -58,6 +58,7 @@ const App: React.FC = () => {
 
   const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [envError, setEnvError] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -104,23 +105,38 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // This effect runs to verify the API key status against the official source.
+    // This effect verifies the API key status, with a timeout to prevent an infinite loading loop.
     if (user) {
         setIsCheckingApiKey(true);
-        // The host environment might take a moment to inject the aistudio object.
-        // We poll for it to be available before checking.
+        setEnvError(null);
+        let intervalId: number | undefined;
+        let timeoutId: number | undefined;
+
+        const cleanup = () => {
+            if (intervalId) clearInterval(intervalId);
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+
         if (window.aistudio) {
             checkApiKey();
         } else {
-            const intervalId = setInterval(() => {
+            intervalId = window.setInterval(() => {
                 if (window.aistudio) {
-                    clearInterval(intervalId);
+                    cleanup();
                     checkApiKey();
                 }
             }, 100);
-            // Cleanup interval if component unmounts
-            return () => clearInterval(intervalId);
+
+            timeoutId = window.setTimeout(() => {
+                cleanup();
+                console.error("window.aistudio failed to initialize within 5 seconds.");
+                setEnvError("Could not connect to the AI Studio environment. Please try refreshing the page.");
+                setHasApiKey(false);
+                setIsCheckingApiKey(false);
+            }, 5000); // 5-second timeout
         }
+
+        return cleanup;
     }
   }, [user, checkApiKey]);
 
@@ -162,6 +178,7 @@ const App: React.FC = () => {
   const handleSelectKey = async () => {
     if (window.aistudio) {
       setApiKeyError(null);
+      setEnvError(null);
       try {
         await window.aistudio.openSelectKey();
         
@@ -192,6 +209,7 @@ const App: React.FC = () => {
     }
     
     setApiKeyError(null); // Clear previous API key errors on a new submission.
+    setEnvError(null);
 
     if (!topic.trim() || !grade || !language || !emotion || !userRole) {
         const formError = new Error("Please fill out all fields before generating a story.");
@@ -277,13 +295,20 @@ const App: React.FC = () => {
                         <p>{apiKeyError}</p>
                     </div>
                 )}
+                {envError && (
+                     <div className="mt-4 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-lg max-w-md text-left text-sm" role="alert">
+                        <p className="font-bold">Connection Issue</p>
+                        <p>{envError}</p>
+                    </div>
+                )}
                 <p className="mt-4 text-sm text-gray-500 max-w-md">
                     This enables the app to use Google's generative models. Standard API usage rates apply. 
                     <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more about billing</a>.
                 </p>
                 <button
                     onClick={handleSelectKey}
-                    className="mt-6 flex items-center justify-center gap-3 px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                    disabled={!!envError}
+                    className="mt-6 flex items-center justify-center gap-3 px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Select API Key
                 </button>
