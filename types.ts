@@ -9,6 +9,12 @@ export interface Story {
   moral_message: string;
 }
 
+export interface User {
+  name: string;
+  email: string;
+  picture: string;
+}
+
 // --- Custom Error Classes ---
 
 /**

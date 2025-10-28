@@ -5,16 +5,9 @@ import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { generateStoryAndAudio } from './services/geminiService';
-import type { Story } from './types';
+import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
 import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES } from './constants';
-
-// Mock User Type
-interface User {
-  name: string;
-  email: string;
-  picture: string;
-}
 
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
@@ -81,18 +74,16 @@ const App: React.FC = () => {
   };
 
 
-  const handleLogin = () => {
-    // This is a mock login. In a real app, this would involve an OAuth flow.
-    const mockUser = {
-      name: 'Alex Doe',
-      email: 'alex.doe@example.com',
-      picture: 'https://i.pravatar.cc/150?u=alexdoe' // Using a placeholder image service
-    };
-    setUser(mockUser);
-    localStorage.setItem('feelEdUser', JSON.stringify(mockUser));
+  const handleLogin = (loggedInUser: User) => {
+    setUser(loggedInUser);
+    localStorage.setItem('feelEdUser', JSON.stringify(loggedInUser));
   };
 
   const handleLogout = () => {
+    // Log out from Google's context to prevent automatic sign-in on next visit
+    if ((window as any).google?.accounts.id) {
+      (window as any).google.accounts.id.disableAutoSelect();
+    }
     setUser(null);
     localStorage.removeItem('feelEdUser');
   };

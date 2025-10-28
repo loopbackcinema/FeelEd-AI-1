@@ -1,21 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleIcon } from './icons/GoogleIcon';
-
-interface User {
-  name: string;
-  email: string;
-  picture: string;
-}
+import type { User } from '../types';
 
 interface HeaderProps {
   user: User | null;
-  onLogin: () => void;
+  onLogin: (user: User) => void;
   onLogout: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const signInButtonContainerRef = useRef<HTMLDivElement>(null);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -29,6 +24,54 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [dropdownRef]);
+
+    useEffect(() => {
+        if (user || !signInButtonContainerRef.current) {
+            return;
+        }
+
+        const handleCredentialResponse = (response: any) => {
+            try {
+                // Decode the JWT token to get user info without a third-party library
+                const decodedToken: any = JSON.parse(atob(response.credential.split('.')[1]));
+                const loggedInUser: User = {
+                    name: decodedToken.name,
+                    email: decodedToken.email,
+                    picture: decodedToken.picture,
+                };
+                onLogin(loggedInUser);
+            } catch (error) {
+                console.error("Error decoding JWT token:", error);
+            }
+        };
+
+        const initializeGsi = () => {
+            if ((window as any).google?.accounts?.id) {
+                (window as any).google.accounts.id.initialize({
+                    // IMPORTANT: Replace this with your actual Google Client ID
+                    client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+                    callback: handleCredentialResponse
+                });
+                if (signInButtonContainerRef.current) {
+                    (window as any).google.accounts.id.renderButton(
+                        signInButtonContainerRef.current,
+                        { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', logo_alignment: 'left' }
+                    );
+                }
+            } else {
+                 console.warn("Google Identity Services script not loaded yet.");
+            }
+        };
+
+        // The GSI script is loaded asynchronously. If it's not ready, wait a bit.
+        if (!(window as any).google) {
+            const timeoutId = setTimeout(initializeGsi, 500);
+            return () => clearTimeout(timeoutId);
+        } else {
+            initializeGsi();
+        }
+
+    }, [user, onLogin]);
 
 
   return (
@@ -51,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
                     <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 p-2 rounded-full hover:bg-gray-200/50 transition-colors">
                         <img src={user.picture} alt={user.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md"/>
                         <span className="font-semibold text-gray-700 hidden sm:inline">{user.name}</span>
-                        <svg className={`w-5 h-5 text-gray-500 transition-transform hidden sm:inline ${isDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <svg className={`w-5 h-5 text-gray-500 transition-transform hidden sm:inline ${isDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                         </svg>
                     </button>
@@ -70,13 +113,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
                     )}
                  </div>
             ) : (
-                <button
-                    onClick={onLogin}
-                    className="flex items-center gap-3 px-4 py-2 bg-white border border-gray-300 rounded-full shadow-sm hover:shadow-md transition-shadow font-semibold text-gray-700"
-                >
-                    <GoogleIcon className="w-5 h-5" />
-                    Login with Gmail
-                </button>
+                <div ref={signInButtonContainerRef}>
+                    {/* The Google Sign-In button will be rendered here */}
+                </div>
             )}
         </div>
     </header>
