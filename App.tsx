@@ -266,10 +266,14 @@ const App: React.FC = () => {
       try {
         // This promise resolves when the user closes the selection dialog.
         await window.aistudio.openSelectKey();
-        // After the dialog closes, we must re-verify if a key was actually selected.
-        await checkApiKey();
-        // Set a flag to indicate that we should attempt to generate a story now
-        // that the key selection process has completed.
+        
+        // Optimistically assume success to avoid race conditions.
+        // The API call will fail later if no key was actually selected,
+        // which is handled by the InvalidApiKeyError catch block.
+        setHasApiKey(true);
+        sessionStorage.setItem('apiKeySelected', 'true');
+
+        // If the user already has a topic, flag for immediate generation.
         if (topic.trim()) {
           wasKeyJustSelected.current = true;
         }
