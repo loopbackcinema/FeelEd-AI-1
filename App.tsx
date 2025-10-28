@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -169,9 +170,13 @@ const App: React.FC = () => {
         console.error(err);
 
         // Special handling for invalid API keys to avoid the error boundary and show an inline message.
-        if (err.message && (err.message.includes("API key not valid") || err.message.includes("API Key must be set"))) {
+        if (err.message && (
+            err.message.includes("API key not valid") || 
+            err.message.includes("API Key must be set") ||
+            err.message.includes("Requested entity was not found")
+        )) {
             setHasApiKey(false); // Force the user to re-select a key.
-            setApiKeyError("Your selected API key is invalid or has been revoked. Please select a new, valid key to continue.");
+            setApiKeyError("Your selected API key is invalid or could not be found. Please select a new, valid key to continue.");
         } else {
             // Handle all other errors with the main error boundary.
             let title = "An Unexpected Error Occurred";
