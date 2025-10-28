@@ -55,7 +55,6 @@ const App: React.FC = () => {
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [envError, setEnvError] = useState<string | null>(null);
   const wasLoginTriggeredBySubmit = useRef<boolean>(false);
-  const wasKeyJustSelected = useRef<boolean>(false);
 
 
   useEffect(() => {
@@ -218,15 +217,6 @@ const App: React.FC = () => {
     }
   }, [user, startStoryGeneration, hasApiKey, userRole]);
 
-  useEffect(() => {
-    // This effect triggers story generation after a user successfully selects an API key
-    // from the modal, ensuring a seamless continuation of their intended action.
-    if (wasKeyJustSelected.current && hasApiKey && topic.trim() && !isLoading) {
-      wasKeyJustSelected.current = false; // Reset the flag to prevent re-triggering
-      startStoryGeneration();
-    }
-  }, [hasApiKey, topic, startStoryGeneration, isLoading]);
-
   const handleLoginSuccess = (credential: string) => {
     try {
       const payload: GoogleJwtPayload = JSON.parse(atob(credential.split('.')[1]));
@@ -267,19 +257,22 @@ const App: React.FC = () => {
         // This promise resolves when the user closes the selection dialog.
         await window.aistudio.openSelectKey();
         
-        // Optimistically assume success to avoid race conditions.
-        // The API call will fail later if no key was actually selected,
-        // which is handled by the InvalidApiKeyError catch block.
+        // This is a critical step to avoid a race condition. `window.aistudio.hasSelectedApiKey()`
+        // may not return `true` immediately after the user selects a key. We optimistically
+        // set our state to `true`. If no key was selected, the next API call will fail,
+        // and our error handling will reset the state correctly.
         setHasApiKey(true);
         sessionStorage.setItem('apiKeySelected', 'true');
 
-        // If the user already has a topic, flag for immediate generation.
-        if (topic.trim()) {
-          wasKeyJustSelected.current = true;
+        // If a topic was already entered, we can proceed to generate the story.
+        // We call `startStoryGeneration` directly for a more immediate response.
+        if (topic.trim() && !isLoading) {
+          startStoryGeneration();
         }
       } catch (e) {
         console.error("Error with select key dialog:", e);
         setHasApiKey(false); // Ensure we reflect the failed state
+        sessionStorage.removeItem('apiKeySelected'); // Also clear session storage on failure
         const keyError = new Error("Could not open the API key selection dialog. Please try again.");
         keyError.name = "UI Error";
         setError(keyError);
