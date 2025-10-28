@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -11,7 +13,7 @@ import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
-import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
+import { AppError, APIError, NetworkError, StoryGenerationError, TTSError, InvalidApiKeyError } from './types';
 import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES } from './constants';
 
 interface GoogleJwtPayload {
@@ -171,13 +173,9 @@ const App: React.FC = () => {
         console.error(err);
 
         // Special handling for invalid API keys to avoid the error boundary and show an inline message.
-        if (err.message && (
-            err.message.includes("API key not valid") || 
-            err.message.includes("API Key must be set") ||
-            err.message.includes("Requested entity was not found")
-        )) {
+        if (err instanceof InvalidApiKeyError) {
             setHasApiKey(false); // Force the user to re-select a key.
-            setApiKeyError("Your selected API key is invalid or could not be found. Please select a new, valid key to continue.");
+            setApiKeyError(err.message);
         } else {
             // Handle all other errors with the main error boundary.
             let title = "An Unexpected Error Occurred";
@@ -275,13 +273,19 @@ const App: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user && guestStoryCount >= 1) {
-        wasLoginTriggeredBySubmit.current = true;
-        setShowLoginModal(true);
-        return;
+      wasLoginTriggeredBySubmit.current = true;
+      setShowLoginModal(true);
+      return;
     }
-    
+
+    // Explicitly check for API key before proceeding for relevant users.
+    // This acts as a safeguard and ensures the modal is the primary CTA.
+    if (user && userRole !== 'Student' && !hasApiKey) {
+      return;
+    }
+
     startStoryGeneration();
   };
 

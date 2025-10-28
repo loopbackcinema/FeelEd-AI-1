@@ -1,4 +1,5 @@
 
+
 export interface Story {
   title: string;
   emotion_tone: string;
@@ -41,6 +42,15 @@ export class NetworkError extends AppError {
  */
 export class APIError extends AppError {
   constructor(message = "There was an issue communicating with the AI. Please try again later.") {
+    super(message);
+  }
+}
+
+/**
+ * Thrown when the user's API key is invalid or missing.
+ */
+export class InvalidApiKeyError extends AppError {
+  constructor(message = "Your selected API key is invalid or could not be found. Please select a new, valid key to continue.") {
     super(message);
   }
 }

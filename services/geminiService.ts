@@ -1,7 +1,7 @@
 // Fix: Removed unused and non-existent type 'LiveSession'.
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { Story } from '../types';
-import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
+import { AppError, APIError, NetworkError, StoryGenerationError, TTSError, InvalidApiKeyError } from '../types';
 
 const storyGenerationModel = 'gemini-2.5-pro';
 const ttsModel = 'gemini-2.5-flash-preview-tts';
@@ -186,6 +186,15 @@ export async function generateStoryAndAudio(
     return { story, audioUrl };
   } catch (error: any) {
     console.error("Error in generateStoryAndAudio:", error);
+    
+    if (error.message && (
+        error.message.includes("API key not valid") || 
+        error.message.includes("API Key must be set") ||
+        error.message.includes("Requested entity was not found")
+    )) {
+        throw new InvalidApiKeyError();
+    }
+
     if (error instanceof AppError) {
       throw error;
     }
