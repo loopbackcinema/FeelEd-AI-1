@@ -33,6 +33,18 @@ const App: React.FC = () => {
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // Check for persisted user session
+    try {
+      const storedUser = localStorage.getItem('feelEdUser');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (e) {
+      console.error("Failed to parse user from localStorage", e);
+      localStorage.removeItem('feelEdUser');
+    }
+
+    // Check for API key
     const aistudio = (window as any).aistudio;
     if (aistudio && typeof aistudio.hasSelectedApiKey === 'function') {
       aistudio.hasSelectedApiKey().then((selected: boolean) => {
@@ -71,15 +83,18 @@ const App: React.FC = () => {
 
   const handleLogin = () => {
     // This is a mock login. In a real app, this would involve an OAuth flow.
-    setUser({
+    const mockUser = {
       name: 'Alex Doe',
       email: 'alex.doe@example.com',
       picture: 'https://i.pravatar.cc/150?u=alexdoe' // Using a placeholder image service
-    });
+    };
+    setUser(mockUser);
+    localStorage.setItem('feelEdUser', JSON.stringify(mockUser));
   };
 
   const handleLogout = () => {
     setUser(null);
+    localStorage.removeItem('feelEdUser');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
