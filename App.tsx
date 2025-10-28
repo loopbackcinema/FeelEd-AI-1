@@ -62,17 +62,32 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const checkApiKey = async () => {
-      if (user && window.aistudio) {
-        setIsCheckingApiKey(true);
-        const keySelected = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(keySelected);
+      if (!user) {
         setIsCheckingApiKey(false);
-      } else if (!user) {
-        setIsCheckingApiKey(false);
+        return; // Early exit if no user
       }
+
+      setIsCheckingApiKey(true); // Start loading state
+
+      if (window.aistudio) {
+        try {
+          const keySelected = await window.aistudio.hasSelectedApiKey();
+          setHasApiKey(keySelected);
+        } catch (e) {
+          console.error("Error checking API key status:", e);
+          setHasApiKey(false); // Assume no key on error to be safe
+        }
+      } else {
+        console.warn("`window.aistudio` is not available. Assuming no API key is selected.");
+        setHasApiKey(false); // If aistudio doesn't exist, we definitely don't have a key
+      }
+
+      setIsCheckingApiKey(false); // End loading state
     };
+
     checkApiKey();
   }, [user]);
+
 
   if (error) {
     // This will be caught by the nearest Error Boundary
