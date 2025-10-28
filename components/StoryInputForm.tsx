@@ -16,10 +16,11 @@ interface StoryInputFormProps {
   setUserRole: (role: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   isLoading: boolean;
+  hasApiKey: boolean | null;
 }
 
 export const StoryInputForm: React.FC<StoryInputFormProps> = ({
-  topic, setTopic, grade, setGrade, language, setLanguage, emotion, setEmotion, userRole, setUserRole, onSubmit, isLoading
+  topic, setTopic, grade, setGrade, language, setLanguage, emotion, setEmotion, userRole, setUserRole, onSubmit, isLoading, hasApiKey
 }) => {
   return (
     <form onSubmit={onSubmit} className="space-y-8">
@@ -109,6 +110,18 @@ export const StoryInputForm: React.FC<StoryInputFormProps> = ({
       </div>
 
       <div className="pt-4">
+         {hasApiKey === false && (
+          <div className="p-4 mb-6 text-sm text-indigo-800 rounded-lg bg-indigo-50 border border-indigo-200" role="alert">
+            <div className="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 mr-3 flex-shrink-0">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+                </svg>
+                <div>
+                    <span className="font-medium">Action Required:</span> A Gemini API key is needed to generate stories. Clicking the button below will prompt you to select one.
+                </div>
+            </div>
+          </div>
+        )}
         <button
           type="submit"
           disabled={isLoading}

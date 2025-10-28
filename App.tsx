@@ -99,6 +99,13 @@ const App: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Defer API key check until submission
+    if (hasApiKey === false) {
+      handleSelectKey();
+      return; // Stop the submission process
+    }
+
     if (!topic.trim() || !grade || !language || !emotion || !userRole) {
         const formError = new Error("Please fill out all fields before generating a story.");
         formError.name = "Incomplete Form";
@@ -169,28 +176,6 @@ const App: React.FC = () => {
       );
     }
     
-    if (hasApiKey === false) {
-      return (
-        <div className="text-center p-8 bg-indigo-50 border border-indigo-200 rounded-xl animate-fade-in-up">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="h-6 w-6 text-indigo-600">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
-            </svg>
-          </div>
-          <h3 className="mt-4 text-xl font-semibold text-indigo-800">API Key Required</h3>
-          <p className="text-indigo-700 mt-2 max-w-md mx-auto">
-            To use FeelEd AI, please select your Gemini API key. Your key is stored securely and only used while you're on this page. For more information on API keys and billing, see the <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="font-semibold underline hover:text-indigo-900">official documentation</a>.
-          </p>
-          <button
-            onClick={handleSelectKey}
-            className="mt-6 px-6 py-2 text-base font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Select API Key
-          </button>
-        </div>
-      );
-    }
-    
     if (isLoading) {
       if (streamingStory && Object.keys(streamingStory).length > 0) {
         return <StoryOutput story={streamingStory} audioUrl={null} onReset={handleReset} isStreaming={true} />;
@@ -216,6 +201,7 @@ const App: React.FC = () => {
         setUserRole={setUserRole}
         onSubmit={handleSubmit}
         isLoading={isLoading}
+        hasApiKey={hasApiKey}
       />
     );
   };
