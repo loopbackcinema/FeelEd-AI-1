@@ -5,6 +5,7 @@ import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoginScreen } from './components/LoginScreen';
+import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
@@ -16,14 +17,12 @@ interface GoogleJwtPayload {
   picture: string;
 }
 
-// Fix: Define the AIStudio interface to resolve a global type conflict.
-// This ensures that all declarations of window.aistudio use a consistent type.
-interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-}
-
+// Fix: Resolved TypeScript global type conflict by defining and using a consistent 'AIStudio' interface.
 declare global {
+    interface AIStudio {
+        hasSelectedApiKey: () => Promise<boolean>;
+        openSelectKey: () => Promise<void>;
+    }
     interface Window {
         google: any;
         aistudio?: AIStudio;
@@ -35,7 +34,7 @@ const App: React.FC = () => {
   const [grade, setGrade] = useState<string>(GRADES[4]); // Default to Grade 5
   const [language, setLanguage] = useState<string>(LANGUAGES[0]); // Default to English
   const [emotion, setEmotion] = useState<string>(EMOTIONS[0]); // Default to Curious
-  const [userRole, setUserRole] = useState<string>(USER_ROLES[1]); // Default to Student
+  const [userRole, setUserRole] = useState<string>(USER_ROLES[0]); // Default to Teacher
 
   const [story, setStory] = useState<Story | null>(null);
   const [streamingStory, setStreamingStory] = useState<Partial<Story> | null>(null);
@@ -193,6 +192,9 @@ const App: React.FC = () => {
     }
     
     if (!hasApiKey) {
+        if (userRole === 'Student') {
+            return <StudentApiKeyMessage />;
+        }
         return (
             <div className="flex flex-col items-center justify-center text-center animate-fade-in-up py-12">
                 <h2 className="text-2xl font-bold text-gray-800 tracking-tight">API Key Required</h2>
