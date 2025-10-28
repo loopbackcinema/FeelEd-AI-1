@@ -80,10 +80,6 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    // Log out from Google's context to prevent automatic sign-in on next visit
-    if ((window as any).google?.accounts.id) {
-      (window as any).google.accounts.id.disableAutoSelect();
-    }
     setUser(null);
     localStorage.removeItem('feelEdUser');
   };
