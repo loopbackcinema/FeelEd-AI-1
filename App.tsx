@@ -16,9 +16,17 @@ interface GoogleJwtPayload {
   picture: string;
 }
 
+// Fix: Define the AIStudio interface to resolve a global type conflict.
+// This ensures that all declarations of window.aistudio use a consistent type.
+interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+}
+
 declare global {
     interface Window {
         google: any;
+        aistudio?: AIStudio;
     }
 }
 
@@ -36,6 +44,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<Error | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+  const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
+
 
   useEffect(() => {
     // Check for persisted user session
@@ -49,6 +60,20 @@ const App: React.FC = () => {
       localStorage.removeItem('feelEdUser');
     }
   }, []);
+
+  useEffect(() => {
+    const checkApiKey = async () => {
+      if (user && window.aistudio) {
+        setIsCheckingApiKey(true);
+        const keySelected = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(keySelected);
+        setIsCheckingApiKey(false);
+      } else if (!user) {
+        setIsCheckingApiKey(false);
+      }
+    };
+    checkApiKey();
+  }, [user]);
 
   if (error) {
     // This will be caught by the nearest Error Boundary
@@ -80,6 +105,21 @@ const App: React.FC = () => {
     setUser(null);
   };
 
+  const handleSelectKey = async () => {
+    if (window.aistudio) {
+      try {
+        await window.aistudio.openSelectKey();
+        // Assume success and update state to re-render the UI
+        setHasApiKey(true);
+      } catch (e) {
+        console.error("Error opening select key dialog:", e);
+        const keyError = new Error("Could not open the API key selection dialog. Please try again.");
+        keyError.name = "UI Error";
+        setError(keyError);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -105,23 +145,30 @@ const App: React.FC = () => {
       setAudioUrl(result.audioUrl);
     } catch (err: any) {
         console.error(err);
-        
-        let title = "An Unexpected Error Occurred";
-        let message = "Something went wrong. Please try again. If the problem persists, contact support.";
 
-        if (err instanceof AppError) {
-            message = err.message;
-            if (err instanceof NetworkError) title = "Network Connection Error";
-            else if (err instanceof APIError) title = "AI Service Error";
-            else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
-            else if (err instanceof TTSError) title = "Audio Narration Failed";
-        } else if (err.message) {
-            message = err.message;
+        if (err.message && err.message.includes("Requested entity was not found")) {
+            setHasApiKey(false);
+            const keyError = new Error("Your selected API key is invalid or has been revoked. Please select a valid key to continue.");
+            keyError.name = "Invalid API Key";
+            setError(keyError);
+        } else {
+            let title = "An Unexpected Error Occurred";
+            let message = "Something went wrong. Please try again. If the problem persists, contact support.";
+
+            if (err instanceof AppError) {
+                message = err.message;
+                if (err instanceof NetworkError) title = "Network Connection Error";
+                else if (err instanceof APIError) title = "AI Service Error";
+                else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
+                else if (err instanceof TTSError) title = "Audio Narration Failed";
+            } else if (err.message) {
+                message = err.message;
+            }
+
+            const appError = new Error(message);
+            appError.name = title;
+            setError(appError);
         }
-
-        const appError = new Error(message);
-        appError.name = title;
-        setError(appError);
         
     } finally {
       setIsLoading(false);
@@ -139,6 +186,31 @@ const App: React.FC = () => {
   const renderContent = () => {
     if (!user) {
       return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+    }
+
+    if (isCheckingApiKey) {
+        return <Loader />;
+    }
+    
+    if (!hasApiKey) {
+        return (
+            <div className="flex flex-col items-center justify-center text-center animate-fade-in-up py-12">
+                <h2 className="text-2xl font-bold text-gray-800 tracking-tight">API Key Required</h2>
+                <p className="mt-2 text-lg text-gray-600 max-w-md">
+                    To use FeelEd AI, you need to select a Gemini API key for your project.
+                </p>
+                <p className="mt-2 text-sm text-gray-500 max-w-md">
+                    This enables the app to use Google's generative models. Standard API usage rates apply. 
+                    <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more about billing</a>.
+                </p>
+                <button
+                    onClick={handleSelectKey}
+                    className="mt-6 flex items-center justify-center gap-3 px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                >
+                    Select API Key
+                </button>
+            </div>
+        );
     }
     
     if (isLoading) {

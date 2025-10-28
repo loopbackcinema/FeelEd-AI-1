@@ -13,38 +13,48 @@ declare global {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     const googleButtonRef = useRef<HTMLDivElement>(null);
+    const initialized = useRef(false);
 
     useEffect(() => {
         const initializeGoogleSignIn = () => {
-            if (typeof window.google === 'undefined' || !googleButtonRef.current) return;
+            // Prevent re-initialization or running before the script is loaded/ref is ready
+            if (initialized.current || typeof window.google?.accounts?.id === 'undefined' || !googleButtonRef.current) {
+                return;
+            }
+
+            initialized.current = true; // Mark as initialized to prevent running again
+
             try {
                 window.google.accounts.id.initialize({
                     client_id: GOOGLE_CLIENT_ID,
                     callback: handleCredentialResponse,
-                    use_fedcm_for_prompt: false, // Opt-out of FedCM to avoid permissions errors
+                    use_fedcm_for_prompt: false,
                 });
                 window.google.accounts.id.renderButton(
                     googleButtonRef.current!,
                     { theme: 'outline', size: 'large', type: 'standard', text: 'signin_with' }
                 );
-                window.google.accounts.id.prompt(); // Display the One Tap dialog
+                window.google.accounts.id.prompt();
             } catch (error) {
                 console.error("Error initializing Google Sign-In:", error);
+                initialized.current = false; // Reset on error to allow a future attempt
             }
         };
-        
-        if (typeof window.google !== 'undefined') {
+
+        // Check if the script is already loaded
+        if (typeof window.google?.accounts?.id !== 'undefined') {
             initializeGoogleSignIn();
         } else {
+            // If not loaded, poll for it
             const interval = setInterval(() => {
-                if (typeof window.google !== 'undefined') {
+                if (typeof window.google?.accounts?.id !== 'undefined') {
                     clearInterval(interval);
                     initializeGoogleSignIn();
                 }
             }, 100);
-            return () => clearInterval(interval);
+            return () => clearInterval(interval); // Cleanup on unmount
         }
-    }, []);
+    }, []); // Empty dependency array ensures this runs only once on mount
 
     const handleCredentialResponse = (response: any) => {
         onLoginSuccess(response.credential);
