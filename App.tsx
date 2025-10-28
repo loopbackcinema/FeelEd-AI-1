@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -17,11 +16,6 @@ interface User {
   picture: string;
 }
 
-interface ErrorState {
-  title: string;
-  message: string;
-}
-
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
   const [grade, setGrade] = useState<string>(GRADES[4]); // Default to Grade 5
@@ -33,7 +27,7 @@ const App: React.FC = () => {
   const [streamingStory, setStreamingStory] = useState<Partial<Story> | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<ErrorState | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
@@ -51,6 +45,11 @@ const App: React.FC = () => {
     }
   }, []);
 
+  if (error) {
+    // This will be caught by the nearest Error Boundary
+    throw error;
+  }
+
   const handleSelectKey = async () => {
     try {
       const aistudio = (window as any).aistudio;
@@ -61,12 +60,11 @@ const App: React.FC = () => {
       } else {
         throw new Error("API key selection mechanism is not available.");
       }
-    } catch (error) {
-      console.error("Could not open API key selection:", error);
-      setError({
-        title: "Configuration Error",
-        message: "The API key selection feature is not available. Please ensure you are running in a supported environment.",
-      });
+    } catch (e) {
+      console.error("Could not open API key selection:", e);
+      const newError = new Error("The API key selection feature is not available. Please ensure you are running in a supported environment.");
+      newError.name = "Configuration Error";
+      setError(newError);
     }
   };
 
@@ -87,12 +85,13 @@ const App: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim() || !grade || !language || !emotion || !userRole) {
-      setError({ title: "Incomplete Form", message: "Please fill out all fields before generating a story." });
-      return;
+        const formError = new Error("Please fill out all fields before generating a story.");
+        formError.name = "Incomplete Form";
+        setError(formError);
+        return;
     }
     
     setIsLoading(true);
-    setError(null);
     setStory(null);
     setAudioUrl(null);
     setStreamingStory({});
@@ -106,31 +105,32 @@ const App: React.FC = () => {
       setStory(result.story);
       setAudioUrl(result.audioUrl);
     } catch (err: any) {
-      console.error(err);
-      
-      // Check for specific API key-related errors first
-      if (typeof err.message === 'string' &&
-          (err.message.includes("API Key must be set") || err.message.includes("Requested entity was not found"))) {
-        setHasApiKey(false); // Reset key state to re-prompt user
-        setError({
-          title: "API Key Required",
-          message: "There seems to be an issue with your API key. Please select a valid key to continue."
-        });
-      } else {
-        let title = "An Unexpected Error Occurred";
-        let message = "Something went wrong. Please try again. If the problem persists, contact support.";
-
-        if (err instanceof AppError) {
-          message = err.message;
-          if (err instanceof NetworkError) title = "Network Connection Error";
-          else if (err instanceof APIError) title = "AI Service Error";
-          else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
-          else if (err instanceof TTSError) title = "Audio Narration Failed";
-        }
+        console.error(err);
         
-        setError({ title, message });
-      }
+        // Handle API key errors by showing the selection prompt, not by crashing.
+        if (typeof err.message === 'string' &&
+            (err.message.includes("API Key must be set") || err.message.includes("Requested entity was not found"))) {
+            setHasApiKey(false); // Reset key state to re-prompt user
+        } else {
+            // For all other errors, create a new Error object and set it in state.
+            // The next render will throw this, triggering the Error Boundary.
+            let title = "An Unexpected Error Occurred";
+            let message = "Something went wrong. Please try again. If the problem persists, contact support.";
 
+            if (err instanceof AppError) {
+                message = err.message;
+                if (err instanceof NetworkError) title = "Network Connection Error";
+                else if (err instanceof APIError) title = "AI Service Error";
+                else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
+                else if (err instanceof TTSError) title = "Audio Narration Failed";
+            } else if (err.message) {
+                message = err.message;
+            }
+
+            const appError = new Error(message);
+            appError.name = title;
+            setError(appError);
+        }
     } finally {
       setIsLoading(false);
       setStreamingStory(null);
@@ -141,14 +141,7 @@ const App: React.FC = () => {
     setStory(null);
     setStreamingStory(null);
     setAudioUrl(null);
-    setError(null);
     setTopic('');
-    // Check if the API key state was reset by an error, and if so, show the prompt again
-    if (hasApiKey === false) {
-       // do nothing, let the key prompt show
-    } else {
-        // normal reset
-    }
   };
 
   const renderContent = () => {
@@ -189,28 +182,11 @@ const App: React.FC = () => {
       }
       return <Loader />;
     }
-    if (error) {
-      return (
-        <div className="text-center p-8 bg-red-50 border border-red-200 rounded-xl animate-fade-in-up">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-            <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h3 className="mt-4 text-xl font-semibold text-red-800">{error.title}</h3>
-          <p className="text-red-600 mt-2 max-w-md mx-auto">{error.message}</p>
-          <button
-            onClick={handleReset}
-            className="mt-6 px-6 py-2 text-base font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-          >
-            Try Again
-          </button>
-        </div>
-      );
-    }
+
     if (story && audioUrl) {
       return <StoryOutput story={story} audioUrl={audioUrl} onReset={handleReset} />;
     }
+
     return (
       <StoryInputForm
         topic={topic}
