@@ -1,5 +1,5 @@
 import React from 'react';
-import { GRADES, LANGUAGES, EMOTIONS } from '../constants';
+import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES } from '../constants';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { AudioTranscriber } from './AudioTranscriber';
 
@@ -12,18 +12,20 @@ interface StoryInputFormProps {
   setLanguage: (language: string) => void;
   emotion: string;
   setEmotion: (emotion: string) => void;
+  userRole: string;
+  setUserRole: (role: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   isLoading: boolean;
 }
 
 export const StoryInputForm: React.FC<StoryInputFormProps> = ({
-  topic, setTopic, grade, setGrade, language, setLanguage, emotion, setEmotion, onSubmit, isLoading
+  topic, setTopic, grade, setGrade, language, setLanguage, emotion, setEmotion, userRole, setUserRole, onSubmit, isLoading
 }) => {
   return (
     <form onSubmit={onSubmit} className="space-y-8">
       <div>
         <label htmlFor="topic" className="block text-lg font-semibold text-gray-800 mb-2">
-          What topic do you want to teach?
+          What topic do you want to learn?
         </label>
         <div className="flex items-center w-full p-1 pl-4 border border-gray-300 rounded-xl focus-within:ring-2 focus-within:ring-indigo-500 transition-shadow bg-white gap-2">
           <input
@@ -40,7 +42,21 @@ export const StoryInputForm: React.FC<StoryInputFormProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div>
+          <label htmlFor="userRole" className="block text-lg font-semibold text-gray-800 mb-2">
+            I am a...
+          </label>
+          <select
+            id="userRole"
+            value={userRole}
+            onChange={(e) => setUserRole(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            disabled={isLoading}
+          >
+            {USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
         <div>
           <label htmlFor="grade" className="block text-lg font-semibold text-gray-800 mb-2">
             Grade Level

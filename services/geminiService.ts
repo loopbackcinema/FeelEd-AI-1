@@ -1,6 +1,8 @@
+
 // Fix: Removed unused and non-existent type 'LiveSession'.
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { Story } from '../types';
+import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable not set");
@@ -75,49 +77,73 @@ function pcmToWav(pcmData: Uint8Array): Blob {
     return new Blob([view], { type: 'audio/wav' });
 }
 
+function parseStoryFromMarkdown(markdown: string): Partial<Story> {
+  const story: Partial<Story> = {};
+  const sections = {
+    title: /# Title\n([\s\S]*?)(?=\n# |$)/,
+    introduction: /# Introduction\n([\s\S]*?)(?=\n# |$)/,
+    emotional_trigger: /# Emotional Trigger\n([\s\S]*?)(?=\n# |$)/,
+    concept_explanation: /# Concept Explanation\n([\s\S]*?)(?=\n# |$)/,
+    resolution: /# Resolution\n([\s\S]*?)(?=\n# |$)/,
+    moral_message: /# Moral Message\n([\s\S]*?)(?=\n# |$)/,
+  };
 
-const storySchema = {
-  type: Type.OBJECT,
-  properties: {
-    title: { type: Type.STRING },
-    emotion_tone: { type: Type.STRING },
-    introduction: { type: Type.STRING },
-    emotional_trigger: { type: Type.STRING },
-    concept_explanation: { type: Type.STRING },
-    resolution: { type: Type.STRING },
-    moral_message: { type: Type.STRING },
-  },
-  required: ['title', 'emotion_tone', 'introduction', 'emotional_trigger', 'concept_explanation', 'resolution', 'moral_message'],
-};
+  for (const [key, regex] of Object.entries(sections)) {
+    const match = markdown.match(regex);
+    if (match && match[1]) {
+      story[key as keyof Story] = match[1].trim();
+    }
+  }
+  return story;
+}
 
 export async function generateStoryAndAudio(
   topic: string,
   grade: string,
   language: string,
-  emotion: string
+  emotion: string,
+  userRole: string,
+  onStoryUpdate: (story: Partial<Story>) => void
 ): Promise<{ story: Story; audioUrl: string }> {
+  if (!navigator.onLine) {
+    throw new NetworkError();
+  }
+
   try {
-    // 1. Generate Story
+    // 1. Generate Story via streaming
     const systemInstruction = `You are an expert educational storyteller. Your task is to convert a given academic topic into a short, emotionally engaging story.
-    The story must follow a 5-part structure: Introduction, Emotional Trigger, Concept Explanation, Resolution, Moral Message.
+    The story must follow a 5-part structure.
     Make it suitable for the given grade level and emotion tone, in the specified language.
-    Output strictly in JSON format only. Do not include any extra commentary outside JSON.`;
+    Tailor the story for the user, who is a ${userRole}. For a teacher, you might include teaching cues or questions. For a parent, you might suggest conversational prompts. For a student, keep it direct and engaging.
+    Output the story in markdown format, with each part under a specific heading: "# Title", "# Introduction", "# Emotional Trigger", "# Concept Explanation", "# Resolution", "# Moral Message".
+    Do not include any other text, commentary, or markdown formatting like bolding or italics.`;
     
-    const storyPrompt = `Topic: ${topic}\nGrade: ${grade}\nLanguage: ${language}\nEmotion Tone: ${emotion}`;
+    const storyPrompt = `Topic: ${topic}\nGrade: ${grade}\nLanguage: ${language}\nEmotion Tone: ${emotion}\nUser Role: ${userRole}`;
     
-    const storyResponse = await ai.models.generateContent({
+    const storyStream = await ai.models.generateContentStream({
       model: storyGenerationModel,
       contents: storyPrompt,
       config: {
         systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: storySchema,
         temperature: 0.7,
       },
     });
 
-    const storyJsonText = storyResponse.text.trim();
-    const story: Story = JSON.parse(storyJsonText);
+    let fullStoryText = '';
+    for await (const chunk of storyStream) {
+        fullStoryText += chunk.text;
+        const partialStory = parseStoryFromMarkdown(fullStoryText);
+        partialStory.emotion_tone = emotion;
+        onStoryUpdate(partialStory);
+    }
+    
+    const story: Story = parseStoryFromMarkdown(fullStoryText) as Story;
+    story.emotion_tone = emotion;
+    
+    if (Object.keys(story).length < 6) { // title + 5 parts
+      throw new StoryGenerationError("The AI didn't generate a complete story structure. Please try again or adjust your topic.");
+    }
+
 
     // 2. Generate Audio (TTS)
     const storyTextForTts = [
@@ -140,7 +166,7 @@ export async function generateStoryAndAudio(
     const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
     if (!base64Audio) {
-      throw new Error("TTS generation failed, no audio data received.");
+      throw new TTSError("The AI failed to generate audio narration for the story.");
     }
     
     const pcmData = decode(base64Audio);
@@ -149,9 +175,12 @@ export async function generateStoryAndAudio(
 
 
     return { story, audioUrl };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in generateStoryAndAudio:", error);
-    throw new Error("Failed to generate story and audio. Please check the console for details.");
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw new APIError(`An unexpected issue occurred with the AI service. Details: ${error.message}`);
   }
 }
 

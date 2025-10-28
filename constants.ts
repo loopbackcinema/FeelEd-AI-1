@@ -9,3 +9,5 @@ export const LANGUAGES = [
 ];
 
 export const EMOTIONS = ["Curious", "Inspiring", "Funny", "Moral"];
+
+export const USER_ROLES = ["Teacher", "Student", "Parent"];
