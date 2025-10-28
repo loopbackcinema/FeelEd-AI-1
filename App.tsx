@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
 import { Loader } from './components/Loader';
@@ -36,6 +36,40 @@ const App: React.FC = () => {
   const [error, setError] = useState<ErrorState | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const aistudio = (window as any).aistudio;
+    if (aistudio && typeof aistudio.hasSelectedApiKey === 'function') {
+      aistudio.hasSelectedApiKey().then((selected: boolean) => {
+        setHasApiKey(selected);
+      });
+    } else {
+      // If the aistudio object isn't available, we assume the key is directly injected.
+      // If API calls fail later, our error handling will catch it.
+      setHasApiKey(true);
+    }
+  }, []);
+
+  const handleSelectKey = async () => {
+    try {
+      const aistudio = (window as any).aistudio;
+      if (aistudio && typeof aistudio.openSelectKey === 'function') {
+        await aistudio.openSelectKey();
+        // Assume success and update UI immediately for responsiveness.
+        setHasApiKey(true);
+      } else {
+        throw new Error("API key selection mechanism is not available.");
+      }
+    } catch (error) {
+      console.error("Could not open API key selection:", error);
+      setError({
+        title: "Configuration Error",
+        message: "The API key selection feature is not available. Please ensure you are running in a supported environment.",
+      });
+    }
+  };
+
 
   const handleLogin = () => {
     // This is a mock login. In a real app, this would involve an OAuth flow.
@@ -73,18 +107,29 @@ const App: React.FC = () => {
       setAudioUrl(result.audioUrl);
     } catch (err: any) {
       console.error(err);
-      let title = "An Unexpected Error Occurred";
-      let message = "Something went wrong. Please try again. If the problem persists, contact support.";
-
-      if (err instanceof AppError) {
-        message = err.message;
-        if (err instanceof NetworkError) title = "Network Connection Error";
-        else if (err instanceof APIError) title = "AI Service Error";
-        else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
-        else if (err instanceof TTSError) title = "Audio Narration Failed";
-      }
       
-      setError({ title, message });
+      // Check for specific API key-related errors first
+      if (typeof err.message === 'string' &&
+          (err.message.includes("API Key must be set") || err.message.includes("Requested entity was not found"))) {
+        setHasApiKey(false); // Reset key state to re-prompt user
+        setError({
+          title: "API Key Required",
+          message: "There seems to be an issue with your API key. Please select a valid key to continue."
+        });
+      } else {
+        let title = "An Unexpected Error Occurred";
+        let message = "Something went wrong. Please try again. If the problem persists, contact support.";
+
+        if (err instanceof AppError) {
+          message = err.message;
+          if (err instanceof NetworkError) title = "Network Connection Error";
+          else if (err instanceof APIError) title = "AI Service Error";
+          else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
+          else if (err instanceof TTSError) title = "Audio Narration Failed";
+        }
+        
+        setError({ title, message });
+      }
 
     } finally {
       setIsLoading(false);
@@ -98,9 +143,46 @@ const App: React.FC = () => {
     setAudioUrl(null);
     setError(null);
     setTopic('');
+    // Check if the API key state was reset by an error, and if so, show the prompt again
+    if (hasApiKey === false) {
+       // do nothing, let the key prompt show
+    } else {
+        // normal reset
+    }
   };
 
   const renderContent = () => {
+    if (hasApiKey === null) {
+      return (
+        <div className="flex justify-center items-center p-10">
+          <div className="w-8 h-8 border-2 border-t-2 border-t-purple-600 border-gray-200 rounded-full animate-spin"></div>
+          <p className="ml-4 text-gray-600">Initializing...</p>
+        </div>
+      );
+    }
+    
+    if (hasApiKey === false) {
+      return (
+        <div className="text-center p-8 bg-indigo-50 border border-indigo-200 rounded-xl animate-fade-in-up">
+          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="h-6 w-6 text-indigo-600">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+            </svg>
+          </div>
+          <h3 className="mt-4 text-xl font-semibold text-indigo-800">API Key Required</h3>
+          <p className="text-indigo-700 mt-2 max-w-md mx-auto">
+            To use FeelEd AI, please select your Gemini API key. Your key is stored securely and only used while you're on this page. For more information on API keys and billing, see the <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="font-semibold underline hover:text-indigo-900">official documentation</a>.
+          </p>
+          <button
+            onClick={handleSelectKey}
+            className="mt-6 px-6 py-2 text-base font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Select API Key
+          </button>
+        </div>
+      );
+    }
+    
     if (isLoading) {
       if (streamingStory && Object.keys(streamingStory).length > 0) {
         return <StoryOutput story={streamingStory} audioUrl={null} onReset={handleReset} isStreaming={true} />;
