@@ -4,10 +4,23 @@ import { StoryOutput } from './components/StoryOutput';
 import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
+import { LoginScreen } from './components/LoginScreen';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
-import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, GUEST_AVATAR_URL } from './constants';
+import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES } from './constants';
+
+interface GoogleJwtPayload {
+  email: string;
+  name: string;
+  picture: string;
+}
+
+declare global {
+    interface Window {
+        google: any;
+    }
+}
 
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
@@ -23,38 +36,17 @@ const App: React.FC = () => {
   const [error, setError] = useState<Error | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
-  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Check for persisted user session or create a new guest session
+    // Check for persisted user session
     try {
       const storedUser = localStorage.getItem('feelEdUser');
       if (storedUser) {
         setUser(JSON.parse(storedUser));
-      } else {
-        const guestUser: User = {
-            name: 'Guest User',
-            email: 'guest@feeled.ai',
-            picture: GUEST_AVATAR_URL,
-        };
-        setUser(guestUser);
-        localStorage.setItem('feelEdUser', JSON.stringify(guestUser));
       }
     } catch (e) {
-      console.error("Failed to process user session", e);
+      console.error("Failed to parse user session, clearing storage.", e);
       localStorage.removeItem('feelEdUser');
-      // Force a clean guest session if storage is corrupted
-      window.location.reload();
-    }
-
-    // Check for API key
-    const aistudio = (window as any).aistudio;
-    if (aistudio && typeof aistudio.hasSelectedApiKey === 'function') {
-      aistudio.hasSelectedApiKey().then((selected: boolean) => {
-        setHasApiKey(selected);
-      });
-    } else {
-      setHasApiKey(true);
     }
   }, []);
 
@@ -62,38 +54,34 @@ const App: React.FC = () => {
     // This will be caught by the nearest Error Boundary
     throw error;
   }
-
-  const handleSelectKey = async () => {
+  
+  const handleLoginSuccess = (credential: string) => {
     try {
-      const aistudio = (window as any).aistudio;
-      if (aistudio && typeof aistudio.openSelectKey === 'function') {
-        await aistudio.openSelectKey();
-        // Assume success and update UI immediately for responsiveness.
-        setHasApiKey(true);
-      } else {
-        throw new Error("API key selection mechanism is not available.");
-      }
+      const payload: GoogleJwtPayload = JSON.parse(atob(credential.split('.')[1]));
+      const newUser: User = {
+        name: payload.name,
+        email: payload.email,
+        picture: payload.picture,
+      };
+      localStorage.setItem('feelEdUser', JSON.stringify(newUser));
+      setUser(newUser);
     } catch (e) {
-      console.error("Could not open API key selection:", e);
-      const newError = new Error("The API key selection feature is not available. Please ensure you are running in a supported environment.");
-      newError.name = "Configuration Error";
-      setError(newError);
+      console.error("Failed to parse credential or save user session", e);
+      setError(new Error("There was a problem signing you in. Please try again."));
     }
   };
 
+
   const handleLogout = () => {
+    if (window.google) {
+        window.google.accounts.id.disableAutoSelect();
+    }
     localStorage.removeItem('feelEdUser');
-    window.location.reload(); // Easiest way to reset to a new guest session
+    setUser(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Defer API key check until submission
-    if (hasApiKey === false) {
-      handleSelectKey();
-      return; // Stop the submission process
-    }
 
     if (!topic.trim() || !grade || !language || !emotion || !userRole) {
         const formError = new Error("Please fill out all fields before generating a story.");
@@ -118,28 +106,23 @@ const App: React.FC = () => {
     } catch (err: any) {
         console.error(err);
         
-        // Handle API key errors by showing the selection prompt, not by crashing.
-        if (typeof err.message === 'string' &&
-            (err.message.includes("API Key must be set") || err.message.includes("Requested entity was not found"))) {
-            setHasApiKey(false); // Reset key state to re-prompt user
-        } else {
-            let title = "An Unexpected Error Occurred";
-            let message = "Something went wrong. Please try again. If the problem persists, contact support.";
+        let title = "An Unexpected Error Occurred";
+        let message = "Something went wrong. Please try again. If the problem persists, contact support.";
 
-            if (err instanceof AppError) {
-                message = err.message;
-                if (err instanceof NetworkError) title = "Network Connection Error";
-                else if (err instanceof APIError) title = "AI Service Error";
-                else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
-                else if (err instanceof TTSError) title = "Audio Narration Failed";
-            } else if (err.message) {
-                message = err.message;
-            }
-
-            const appError = new Error(message);
-            appError.name = title;
-            setError(appError);
+        if (err instanceof AppError) {
+            message = err.message;
+            if (err instanceof NetworkError) title = "Network Connection Error";
+            else if (err instanceof APIError) title = "AI Service Error";
+            else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
+            else if (err instanceof TTSError) title = "Audio Narration Failed";
+        } else if (err.message) {
+            message = err.message;
         }
+
+        const appError = new Error(message);
+        appError.name = title;
+        setError(appError);
+        
     } finally {
       setIsLoading(false);
       setStreamingStory(null);
@@ -154,13 +137,8 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (hasApiKey === null || user === null) {
-      return (
-        <div className="flex justify-center items-center p-10">
-          <div className="w-8 h-8 border-2 border-t-2 border-t-purple-600 border-gray-200 rounded-full animate-spin"></div>
-          <p className="ml-4 text-gray-600">Initializing...</p>
-        </div>
-      );
+    if (!user) {
+      return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
     }
     
     if (isLoading) {
@@ -188,7 +166,6 @@ const App: React.FC = () => {
         setUserRole={setUserRole}
         onSubmit={handleSubmit}
         isLoading={isLoading}
-        hasApiKey={hasApiKey}
       />
     );
   };

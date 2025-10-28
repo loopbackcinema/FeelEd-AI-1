@@ -12,5 +12,5 @@ export const EMOTIONS = ["Curious", "Inspiring", "Funny", "Moral"];
 
 export const USER_ROLES = ["Teacher", "Student", "Parent"];
 
-// A generic, gray SVG avatar for guest users, encoded as a data URI.
-export const GUEST_AVATAR_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0EwQTBCMyI+PHBhdGggZD0iTTEyIDJDNi44OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bTAgM2MxLjY2IDAgMyAxLjM0IDMgM3MtMS4zNCAzLTMgMy0zLTEuMzQtMy0zIDEuMzQtMyAzIDN6bTAgMTRjLTIuMDMgMC0zLjg0LS44MS01LjE1LTIuMTFDOC4yOCAxNS40NSAxMC4xMyAxNSAxMiAxNXMzLjcyLjQ1IDUuMTUgMS44OUMxNS44NCAxOC4xOSAxNC4wMyAxOSAxMiAxOXoiLz48L3N2Zz4=';
+// The Client ID for Google Sign-In functionality.
+export const GOOGLE_CLIENT_ID = '208105784717-p6s19r99vnb53l0r9ju5f7b845fvna75.apps.googleusercontent.com';
