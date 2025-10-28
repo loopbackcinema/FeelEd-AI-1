@@ -149,18 +149,29 @@ const App: React.FC = () => {
 
   const handleSelectKey = async () => {
     if (window.aistudio) {
+      // Set the persistence flag and optimistically update the UI *before* opening the dialog.
+      // This is the key change to break the loop if the dialog causes a reload.
+      localStorage.setItem('apiKeySelectionAttempted', 'true');
+      setHasApiKey(true);
+      setApiKeyError(null);
+
       try {
-        // Set a flag before opening the dialog. If the page reloads,
-        // we can use this flag to optimistically assume a key was selected.
-        localStorage.setItem('apiKeySelectionAttempted', 'true');
         await window.aistudio.openSelectKey();
-        // After the dialog closes, we assume success as per guidelines.
-        // We set the state directly. If a page reload happened, the new initial state
-        // from localStorage will handle it.
-        setHasApiKey(true);
-        setApiKeyError(null); // Clear any previous key errors
+        
+        // After the dialog closes, verify the selection to handle cancellation.
+        const isKeyTrulySelected = await window.aistudio.hasSelectedApiKey();
+        
+        if (!isKeyTrulySelected) {
+          // User cancelled. Revert the optimistic state and clear the persistence flag.
+          localStorage.removeItem('apiKeySelectionAttempted');
+          setHasApiKey(false); 
+        }
+        // If it is truly selected, our optimistic state was correct, so do nothing.
       } catch (e) {
-        console.error("Error opening select key dialog:", e);
+        console.error("Error with select key dialog:", e);
+        // If the process failed, revert and clear persistence.
+        localStorage.removeItem('apiKeySelectionAttempted');
+        setHasApiKey(false);
         const keyError = new Error("Could not open the API key selection dialog. Please try again.");
         keyError.name = "UI Error";
         setError(keyError);
