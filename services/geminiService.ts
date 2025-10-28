@@ -1,18 +1,22 @@
-
 // Fix: Removed unused and non-existent type 'LiveSession'.
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { Story } from '../types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const storyGenerationModel = 'gemini-2.5-pro';
 const ttsModel = 'gemini-2.5-flash-preview-tts';
 const transcriptionModel = 'gemini-2.5-flash-native-audio-preview-09-2025';
+
+// --- Helper function to get the AI client ---
+const getAIClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    // This error will be caught by the calling function's try/catch block
+    throw new APIError("The application is missing the required API key. Please configure it in the deployment environment.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
 
 // --- Helper functions for WAV conversion ---
 
@@ -110,6 +114,8 @@ export async function generateStoryAndAudio(
   }
 
   try {
+    const ai = getAIClient(); // Lazily initialize the AI client
+    
     // 1. Generate Story via streaming
     const systemInstruction = `You are an expert educational storyteller. Your task is to convert a given academic topic into a short, emotionally engaging story.
     The story must follow a 5-part structure.
@@ -193,26 +199,39 @@ export function createTranscriptionSession(
 // Fix: Removed 'Promise<LiveSession>' return type to allow for type inference,
 // as 'LiveSession' is not an exported member of the SDK.
 ) {
-    return ai.live.connect({
-        model: transcriptionModel,
-        callbacks: {
-            onopen: () => console.log('Transcription session opened.'),
-            onmessage: (message) => {
-                if (message.serverContent?.inputTranscription) {
-                    callbacks.onMessage(message.serverContent.inputTranscription.text);
-                }
+    try {
+        const ai = getAIClient(); // Lazily initialize the AI client
+        return ai.live.connect({
+            model: transcriptionModel,
+            callbacks: {
+                onopen: () => console.log('Transcription session opened.'),
+                onmessage: (message) => {
+                    if (message.serverContent?.inputTranscription) {
+                        callbacks.onMessage(message.serverContent.inputTranscription.text);
+                    }
+                },
+                onerror: (e: ErrorEvent) => {
+                    console.error('Transcription error:', e);
+                    callbacks.onError(new Error(e.message));
+                },
+                onclose: (e: CloseEvent) => {
+                    console.log('Transcription session closed.');
+                    callbacks.onClose();
+                },
             },
-            onerror: (e: ErrorEvent) => {
-                console.error('Transcription error:', e);
-                callbacks.onError(new Error(e.message));
+            config: {
+                inputAudioTranscription: {},
             },
-            onclose: (e: CloseEvent) => {
-                console.log('Transcription session closed.');
-                callbacks.onClose();
-            },
-        },
-        config: {
-            inputAudioTranscription: {},
-        },
-    });
+        });
+    } catch(error) {
+        console.error("Failed to create transcription session:", error);
+        // Immediately call the onError callback if client creation fails
+        if(error instanceof Error) {
+            callbacks.onError(error);
+        } else {
+            callbacks.onError(new Error("An unknown error occurred while setting up transcription."));
+        }
+        // Return a dummy promise that rejects to fulfill the type signature
+        return Promise.reject(error);
+    }
 }
