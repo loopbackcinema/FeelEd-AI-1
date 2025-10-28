@@ -43,7 +43,10 @@ const App: React.FC = () => {
   const [error, setError] = useState<Error | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
-  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+  // This state is now initialized from localStorage to persist the optimistic
+  // "has key" state across page reloads that may occur when the external
+  // API key selection dialog is opened.
+  const [hasApiKey, setHasApiKey] = useState<boolean>(() => localStorage.getItem('apiKeySelectionAttempted') === 'true');
   const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
@@ -77,9 +80,15 @@ const App: React.FC = () => {
         try {
           const keySelected = await window.aistudio.hasSelectedApiKey();
           setHasApiKey(keySelected);
+          // If the official check reveals no key, the optimistic assumption was wrong.
+          // Clear the flag to ensure the user is prompted again correctly.
+          if (!keySelected) {
+            localStorage.removeItem('apiKeySelectionAttempted');
+          }
         } catch (e) {
           console.error("Error checking API key status:", e);
           setHasApiKey(false); // Assume no key on error
+          localStorage.removeItem('apiKeySelectionAttempted');
         } finally {
           setIsCheckingApiKey(false);
         }
@@ -93,6 +102,7 @@ const App: React.FC = () => {
         console.warn("`window.aistudio` not found after timeout. Assuming no key.");
         setHasApiKey(false);
         setIsCheckingApiKey(false);
+        localStorage.removeItem('apiKeySelectionAttempted');
       }
     }, 5000); // Stop after 5 seconds
 
@@ -130,14 +140,21 @@ const App: React.FC = () => {
         window.google.accounts.id.disableAutoSelect();
     }
     localStorage.removeItem('feelEdUser');
+    // Clear the API key persistence flag on logout.
+    localStorage.removeItem('apiKeySelectionAttempted');
     setUser(null);
   };
 
   const handleSelectKey = async () => {
     if (window.aistudio) {
       try {
+        // Set a flag before opening the dialog. If the page reloads,
+        // we can use this flag to optimistically assume a key was selected.
+        localStorage.setItem('apiKeySelectionAttempted', 'true');
         await window.aistudio.openSelectKey();
-        // Assume success and update state to re-render the UI
+        // After the dialog closes, we assume success as per guidelines.
+        // We set the state directly. If a page reload happened, the new initial state
+        // from localStorage will handle it.
         setHasApiKey(true);
         setApiKeyError(null); // Clear any previous key errors
       } catch (e) {
@@ -178,6 +195,7 @@ const App: React.FC = () => {
 
         // Special handling for invalid API keys to avoid the error boundary and show an inline message.
         if (err.message && err.message.includes("Requested entity was not found")) {
+            localStorage.removeItem('apiKeySelectionAttempted'); // Clear persistence on failure.
             setHasApiKey(false); // Force the user to re-select a key.
             setApiKeyError("Your selected API key is invalid or has been revoked. Please select a new, valid key to continue.");
         } else {
