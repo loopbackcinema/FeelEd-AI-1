@@ -55,6 +55,7 @@ const App: React.FC = () => {
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [envError, setEnvError] = useState<string | null>(null);
   const wasLoginTriggeredBySubmit = useRef<boolean>(false);
+  const wasKeyJustSelected = useRef<boolean>(false);
 
 
   useEffect(() => {
@@ -217,6 +218,15 @@ const App: React.FC = () => {
     }
   }, [user, startStoryGeneration, hasApiKey, userRole]);
 
+  useEffect(() => {
+    // This effect triggers story generation after a user successfully selects an API key
+    // from the modal, ensuring a seamless continuation of their intended action.
+    if (wasKeyJustSelected.current && hasApiKey && topic.trim() && !isLoading) {
+      wasKeyJustSelected.current = false; // Reset the flag to prevent re-triggering
+      startStoryGeneration();
+    }
+  }, [hasApiKey, topic, startStoryGeneration, isLoading]);
+
   const handleLoginSuccess = (credential: string) => {
     try {
       const payload: GoogleJwtPayload = JSON.parse(atob(credential.split('.')[1]));
@@ -254,22 +264,18 @@ const App: React.FC = () => {
       setApiKeyError(null);
       setEnvError(null);
       try {
+        // This promise resolves when the user closes the selection dialog.
         await window.aistudio.openSelectKey();
-        
-        // After the dialog closes, assume success and update session storage.
-        sessionStorage.setItem('apiKeySelected', 'true');
-        setHasApiKey(true); // This will close the modal.
-
-        // If a topic exists, automatically trigger generation for a seamless experience.
+        // After the dialog closes, we must re-verify if a key was actually selected.
+        await checkApiKey();
+        // Set a flag to indicate that we should attempt to generate a story now
+        // that the key selection process has completed.
         if (topic.trim()) {
-            setTimeout(() => {
-                startStoryGeneration();
-            }, 100);
+          wasKeyJustSelected.current = true;
         }
-
       } catch (e) {
         console.error("Error with select key dialog:", e);
-        setHasApiKey(false);
+        setHasApiKey(false); // Ensure we reflect the failed state
         const keyError = new Error("Could not open the API key selection dialog. Please try again.");
         keyError.name = "UI Error";
         setError(keyError);
