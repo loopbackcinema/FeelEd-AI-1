@@ -45,6 +45,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
   const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -61,31 +62,44 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const checkApiKey = async () => {
-      if (!user) {
-        setIsCheckingApiKey(false);
-        return; // Early exit if no user
-      }
+    // This effect now polls for the aistudio object to avoid race conditions
+    // during app initialization, ensuring the API key check is reliable.
+    if (!user) {
+      setIsCheckingApiKey(false);
+      return;
+    }
 
-      setIsCheckingApiKey(true); // Start loading state
+    setIsCheckingApiKey(true);
 
+    const checkInterval = setInterval(async () => {
       if (window.aistudio) {
+        clearInterval(checkInterval);
         try {
           const keySelected = await window.aistudio.hasSelectedApiKey();
           setHasApiKey(keySelected);
         } catch (e) {
           console.error("Error checking API key status:", e);
-          setHasApiKey(false); // Assume no key on error to be safe
+          setHasApiKey(false); // Assume no key on error
+        } finally {
+          setIsCheckingApiKey(false);
         }
-      } else {
-        console.warn("`window.aistudio` is not available. Assuming no API key is selected.");
-        setHasApiKey(false); // If aistudio doesn't exist, we definitely don't have a key
       }
+    }, 200); // Check every 200ms
 
-      setIsCheckingApiKey(false); // End loading state
+    // Set a timeout to stop checking after a few seconds if aistudio is not found
+    const checkTimeout = setTimeout(() => {
+      clearInterval(checkInterval);
+      if (!window.aistudio) {
+        console.warn("`window.aistudio` not found after timeout. Assuming no key.");
+        setHasApiKey(false);
+        setIsCheckingApiKey(false);
+      }
+    }, 5000); // Stop after 5 seconds
+
+    return () => {
+      clearInterval(checkInterval);
+      clearTimeout(checkTimeout);
     };
-
-    checkApiKey();
   }, [user]);
 
 
@@ -125,6 +139,7 @@ const App: React.FC = () => {
         await window.aistudio.openSelectKey();
         // Assume success and update state to re-render the UI
         setHasApiKey(true);
+        setApiKeyError(null); // Clear any previous key errors
       } catch (e) {
         console.error("Error opening select key dialog:", e);
         const keyError = new Error("Could not open the API key selection dialog. Please try again.");
@@ -136,6 +151,7 @@ const App: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setApiKeyError(null); // Clear previous API key errors on a new submission.
 
     if (!topic.trim() || !grade || !language || !emotion || !userRole) {
         const formError = new Error("Please fill out all fields before generating a story.");
@@ -160,12 +176,12 @@ const App: React.FC = () => {
     } catch (err: any) {
         console.error(err);
 
+        // Special handling for invalid API keys to avoid the error boundary and show an inline message.
         if (err.message && err.message.includes("Requested entity was not found")) {
-            setHasApiKey(false);
-            const keyError = new Error("Your selected API key is invalid or has been revoked. Please select a valid key to continue.");
-            keyError.name = "Invalid API Key";
-            setError(keyError);
+            setHasApiKey(false); // Force the user to re-select a key.
+            setApiKeyError("Your selected API key is invalid or has been revoked. Please select a new, valid key to continue.");
         } else {
+            // Handle all other errors with the main error boundary.
             let title = "An Unexpected Error Occurred";
             let message = "Something went wrong. Please try again. If the problem persists, contact support.";
 
@@ -216,7 +232,13 @@ const App: React.FC = () => {
                 <p className="mt-2 text-lg text-gray-600 max-w-md">
                     To use FeelEd AI, you need to select a Gemini API key for your project.
                 </p>
-                <p className="mt-2 text-sm text-gray-500 max-w-md">
+                {apiKeyError && (
+                    <div className="mt-4 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg max-w-md text-left text-sm" role="alert">
+                        <p className="font-bold">Invalid API Key</p>
+                        <p>{apiKeyError}</p>
+                    </div>
+                )}
+                <p className="mt-4 text-sm text-gray-500 max-w-md">
                     This enables the app to use Google's generative models. Standard API usage rates apply. 
                     <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more about billing</a>.
                 </p>
