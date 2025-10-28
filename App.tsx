@@ -4,7 +4,7 @@ import { StoryOutput } from './components/StoryOutput';
 import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { LoginScreen } from './components/LoginScreen';
+import { LoginModal } from './components/LoginModal';
 import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
@@ -41,6 +41,7 @@ const App: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   const [user, setUser] = useState<User | null>(null);
   // This state is now initialized from localStorage to persist the optimistic
@@ -128,6 +129,7 @@ const App: React.FC = () => {
       };
       localStorage.setItem('feelEdUser', JSON.stringify(newUser));
       setUser(newUser);
+      setShowLoginModal(false);
     } catch (e) {
       console.error("Failed to parse credential or save user session", e);
       setError(new Error("There was a problem signing you in. Please try again."));
@@ -168,6 +170,12 @@ const App: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user) {
+        setShowLoginModal(true);
+        return;
+    }
+    
     setApiKeyError(null); // Clear previous API key errors on a new submission.
 
     if (!topic.trim() || !grade || !language || !emotion || !userRole) {
@@ -232,15 +240,11 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (!user) {
-      return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
-    }
-
     if (isCheckingApiKey) {
         return <Loader />;
     }
     
-    if (!hasApiKey) {
+    if (user && !hasApiKey) {
         if (userRole === 'Student') {
             return <StudentApiKeyMessage />;
         }
@@ -308,6 +312,12 @@ const App: React.FC = () => {
         </main>
         <Footer />
       </div>
+      {showLoginModal && (
+        <LoginModal 
+            onLoginSuccess={handleLoginSuccess}
+            onClose={() => setShowLoginModal(false)}
+        />
+      )}
     </div>
   );
 };
