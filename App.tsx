@@ -296,9 +296,8 @@ const App: React.FC = () => {
       return;
     }
     
+    // This check is a safeguard. The modal should prevent this from being clickable.
     if (user && userRole !== 'Student' && !hasApiKey) {
-      // The modal is already showing, so clicking the disabled generate button does nothing.
-      // This check is a safeguard.
       return;
     }
 
@@ -332,8 +331,8 @@ const App: React.FC = () => {
       return <StoryOutput story={story} audioUrl={audioUrl} onReset={handleReset} />;
     }
 
-    const isFormDisabled = isLoading || (!!user && !hasApiKey && userRole !== 'Student');
-
+    // The form is now only disabled when a story is actively being generated.
+    // The ApiKeyModal will overlay the UI, preventing interaction until a key is selected.
     return (
       <StoryInputForm
         topic={topic}
@@ -347,7 +346,7 @@ const App: React.FC = () => {
         userRole={userRole}
         setUserRole={setUserRole}
         onSubmit={handleSubmit}
-        isLoading={isFormDisabled}
+        isLoading={isLoading}
       />
     );
   };
