@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -249,9 +250,18 @@ const App: React.FC = () => {
       try {
         await window.aistudio.openSelectKey();
         
-        // Optimistically assume the key is now selected to avoid race conditions.
-        // The error handling in handleSubmit will catch any persistent issues.
-        setHasApiKey(true);
+        // The key selection dialog has closed. We will now attempt to proceed.
+        setHasApiKey(true); // This will close the modal.
+
+        // If a topic exists, it's likely the user was trying to generate a story.
+        // We'll automatically trigger the generation for a seamless experience.
+        if (topic.trim()) {
+            // Use a short delay to allow React to re-render and close the modal
+            // before the loading state takes over the UI.
+            setTimeout(() => {
+                startStoryGeneration();
+            }, 100);
+        }
 
       } catch (e) {
         console.error("Error with select key dialog:", e);
