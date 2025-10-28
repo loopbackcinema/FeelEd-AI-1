@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES } from '../constants';
+import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, TTS_VOICES } from '../constants';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { AudioTranscriber } from './AudioTranscriber';
 
@@ -14,12 +15,14 @@ interface StoryInputFormProps {
   setEmotion: (emotion: string) => void;
   userRole: string;
   setUserRole: (role: string) => void;
+  voice: string;
+  setVoice: (voice: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   isLoading: boolean;
 }
 
 export const StoryInputForm: React.FC<StoryInputFormProps> = ({
-  topic, setTopic, grade, setGrade, language, setLanguage, emotion, setEmotion, userRole, setUserRole, onSubmit, isLoading
+  topic, setTopic, grade, setGrade, language, setLanguage, emotion, setEmotion, userRole, setUserRole, voice, setVoice, onSubmit, isLoading
 }) => {
   return (
     <form onSubmit={onSubmit} className="space-y-8">
@@ -42,7 +45,7 @@ export const StoryInputForm: React.FC<StoryInputFormProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         <div>
           <label htmlFor="userRole" className="block text-lg font-semibold text-gray-800 mb-2">
             I am a...
@@ -83,6 +86,20 @@ export const StoryInputForm: React.FC<StoryInputFormProps> = ({
             disabled={isLoading}
           >
             {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="voice" className="block text-lg font-semibold text-gray-800 mb-2">
+            Narration Voice
+          </label>
+          <select
+            id="voice"
+            value={voice}
+            onChange={(e) => setVoice(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            disabled={isLoading}
+          >
+            {TTS_VOICES.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
         </div>
       </div>

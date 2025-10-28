@@ -1,3 +1,4 @@
+
 // Fix: Removed unused and non-existent type 'LiveSession'.
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { Story } from '../types';
@@ -81,21 +82,53 @@ function pcmToWav(pcmData: Uint8Array): Blob {
 
 function parseStoryFromMarkdown(markdown: string): Partial<Story> {
   const story: Partial<Story> = {};
-  const sections = {
-    title: /# Title\n([\s\S]*?)(?=\n# |$)/,
-    introduction: /# Introduction\n([\s\S]*?)(?=\n# |$)/,
-    emotional_trigger: /# Emotional Trigger\n([\s\S]*?)(?=\n# |$)/,
-    concept_explanation: /# Concept Explanation\n([\s\S]*?)(?=\n# |$)/,
-    resolution: /# Resolution\n([\s\S]*?)(?=\n# |$)/,
-    moral_message: /# Moral Message\n([\s\S]*?)(?=\n# |$)/,
+
+  // Map of heading variations (lowercase) to the story object key.
+  // This makes parsing flexible regarding casing or minor variations.
+  const headingMap: Record<string, keyof Story> = {
+    'title': 'title',
+    'introduction': 'introduction',
+    'emotional trigger': 'emotional_trigger',
+    'concept explanation': 'concept_explanation',
+    'resolution': 'resolution',
+    'moral message': 'moral_message',
   };
 
-  for (const [key, regex] of Object.entries(sections)) {
-    const match = markdown.match(regex);
-    if (match && match[1]) {
-      story[key as keyof Story] = match[1].trim();
+  // Split the markdown by H1 headings. The 'm' flag is crucial for multiline matching.
+  // This approach is more robust than regex matching for each section individually.
+  // It handles extraneous text before the first heading and variations in whitespace.
+  const sections = markdown.trim().split(/^\s*#\s+/m);
+
+  for (const section of sections) {
+    // Skip any empty sections resulting from the split (e.g., leading empty string).
+    if (!section.trim()) continue;
+
+    // Find the first newline to separate the heading from the content.
+    const firstNewlineIndex = section.indexOf('\n');
+    
+    let heading: string;
+    let content: string;
+
+    if (firstNewlineIndex === -1) {
+      // This case handles a heading with no content below it, or a single line of text.
+      heading = section.trim();
+      content = '';
+    } else {
+      heading = section.substring(0, firstNewlineIndex).trim();
+      content = section.substring(firstNewlineIndex + 1).trim();
+    }
+
+    // Normalize the heading to match our map keys.
+    const normalizedHeading = heading.toLowerCase().replace(/:$/, '').trim();
+    
+    // Find the corresponding story key.
+    const storyKey = headingMap[normalizedHeading];
+    
+    if (storyKey) {
+      story[storyKey] = content;
     }
   }
+
   return story;
 }
 
@@ -105,7 +138,8 @@ export async function generateStoryAndAudio(
   language: string,
   emotion: string,
   userRole: string,
-  onStoryUpdate: (story: Partial<Story>) => void
+  onStoryUpdate: (story: Partial<Story>) => void,
+  voice: string
 ): Promise<{ story: Story; audioUrl: string }> {
   if (!navigator.onLine) {
     throw new NetworkError();
@@ -166,7 +200,7 @@ export async function generateStoryAndAudio(
             responseModalities: [Modality.AUDIO],
             speechConfig: {
                 voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: 'Kore' },
+                    prebuiltVoiceConfig: { voiceName: voice },
                 },
             },
         },
@@ -175,7 +209,22 @@ export async function generateStoryAndAudio(
     const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
     if (!base64Audio) {
-      throw new TTSError("The AI failed to generate audio narration for the story.");
+      // Enhanced error handling to provide more specific feedback on TTS failure.
+      const candidate = ttsResponse.candidates?.[0];
+      const blockReason = ttsResponse.promptFeedback?.blockReason;
+      let details = '';
+
+      if (blockReason) {
+        details = `The request was blocked (Reason: ${blockReason}).`;
+      } else if (candidate?.finishReason) {
+        details = `Generation failed (Reason: ${candidate.finishReason}).`;
+        if (candidate.finishMessage) {
+          details += ` Details: ${candidate.finishMessage}`;
+        }
+      }
+      
+      const errorMessage = `The AI failed to generate audio narration for the story. ${details}`.trim();
+      throw new TTSError(errorMessage);
     }
     
     const pcmData = decode(base64Audio);

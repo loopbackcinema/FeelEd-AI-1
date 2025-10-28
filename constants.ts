@@ -1,4 +1,5 @@
 
+
 export const GRADES = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`);
 
 export const LANGUAGES = [
@@ -11,6 +12,14 @@ export const LANGUAGES = [
 export const EMOTIONS = ["Curious", "Inspiring", "Funny", "Moral"];
 
 export const USER_ROLES = ["Teacher", "Student", "Parent"];
+
+export const TTS_VOICES = [
+  { id: 'Kore', name: 'Narrator 1 (Female)' },
+  { id: 'Puck', name: 'Narrator 2 (Male)' },
+  { id: 'Charon', name: 'Narrator 3 (Male)' },
+  { id: 'Fenrir', name: 'Narrator 4 (Male)' },
+  { id: 'Zephyr', name: 'Narrator 5 (Female)' },
+];
 
 // The Client ID for Google Sign-In functionality.
 export const GOOGLE_CLIENT_ID = '208105784717-p6s19r99vnb53l0r9ju5f7b845fvna75.apps.googleusercontent.com';

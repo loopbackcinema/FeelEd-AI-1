@@ -31,7 +31,12 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ handleSelectKey, apiKe
 
         <p className="mt-4 text-sm text-gray-500">
           Please select an API key to make the connection. Standard usage rates will apply to your project.
-          <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more</a>.
+          <span className="relative group inline-block">
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more</a>
+            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded-md shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+              Enables personalized stories and advanced features.
+            </span>
+          </span>.
         </p>
 
         <button

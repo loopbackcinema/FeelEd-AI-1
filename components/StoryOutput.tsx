@@ -10,7 +10,7 @@ interface StoryOutputProps {
 }
 
 const StorySection: React.FC<{ title: string; content?: string }> = ({ title, content }) => (
-  <div className="bg-white/50 p-6 rounded-2xl backdrop-blur-sm border border-white/30 min-h-[120px]">
+  <div className="bg-gradient-to-br from-white/60 to-purple-50/40 p-6 rounded-2xl backdrop-blur-lg border border-white/30 shadow-lg min-h-[120px] transition-all duration-300 hover:shadow-xl hover:scale-[1.01]">
     <h3 className="text-xl font-bold text-purple-800 mb-3">{title}</h3>
     {content ? (
         <p className="text-gray-700 leading-relaxed text-base whitespace-pre-wrap">{content}</p>

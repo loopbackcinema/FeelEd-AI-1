@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -10,7 +11,7 @@ import { ApiKeyModal } from './components/ApiKeyModal';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError, InvalidApiKeyError } from './types';
-import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES } from './constants';
+import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, TTS_VOICES } from './constants';
 
 interface GoogleJwtPayload {
   email: string;
@@ -36,6 +37,7 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<string>(LANGUAGES[0]); // Default to English
   const [emotion, setEmotion] = useState<string>(EMOTIONS[0]); // Default to Curious
   const [userRole, setUserRole] = useState<string>(USER_ROLES[0]); // Default to Teacher
+  const [voice, setVoice] = useState<string>(TTS_VOICES[0].id); // Default to first voice
 
   const [story, setStory] = useState<Story | null>(null);
   const [streamingStory, setStreamingStory] = useState<Partial<Story> | null>(null);
@@ -165,7 +167,7 @@ const App: React.FC = () => {
         setStreamingStory(prev => ({ ...prev, ...partialStory }));
       };
 
-      const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, handleStoryUpdate);
+      const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, handleStoryUpdate, voice);
       setStory(result.story);
       setAudioUrl(result.audioUrl);
       
@@ -205,7 +207,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       setStreamingStory(null);
     }
-  }, [topic, grade, language, emotion, userRole, user, guestStoryCount]);
+  }, [topic, grade, language, emotion, userRole, voice, user, guestStoryCount]);
   
   useEffect(() => {
     if (user && wasLoginTriggeredBySubmit.current) {
@@ -338,6 +340,8 @@ const App: React.FC = () => {
         setEmotion={setEmotion}
         userRole={userRole}
         setUserRole={setUserRole}
+        voice={voice}
+        setVoice={setVoice}
         onSubmit={handleSubmit}
         isLoading={isLoading}
       />
