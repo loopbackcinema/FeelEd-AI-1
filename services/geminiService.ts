@@ -164,6 +164,11 @@ export async function generateStoryAndAudio(
         contents: [{ parts: [{ text: storyTextForTts }] }],
         config: {
             responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: 'Kore' },
+                },
+            },
         },
     });
 
