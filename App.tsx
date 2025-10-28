@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
 import { Loader } from './components/Loader';
@@ -44,10 +44,18 @@ const App: React.FC = () => {
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   const [user, setUser] = useState<User | null>(null);
-  // This state is now initialized from localStorage to persist the optimistic
-  // "has key" state across page reloads that may occur when the external
-  // API key selection dialog is opened.
-  const [hasApiKey, setHasApiKey] = useState<boolean>(() => localStorage.getItem('apiKeySelectionAttempted') === 'true');
+  
+  // State is now initialized optimistically from localStorage to provide a
+  // smoother experience on page reloads. It is still verified with the
+  // aistudio environment.
+  const [hasApiKey, setHasApiKey] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('feelEdApiKeySelected') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
@@ -58,60 +66,63 @@ const App: React.FC = () => {
       const storedUser = localStorage.getItem('feelEdUser');
       if (storedUser) {
         setUser(JSON.parse(storedUser));
+      } else {
+        // If there's no user, we don't need to check for a key.
+        setIsCheckingApiKey(false);
       }
     } catch (e) {
       console.error("Failed to parse user session, clearing storage.", e);
       localStorage.removeItem('feelEdUser');
+      setIsCheckingApiKey(false);
     }
   }, []);
 
-  useEffect(() => {
-    // This effect now polls for the aistudio object to avoid race conditions
-    // during app initialization, ensuring the API key check is reliable.
-    if (!user) {
-      setIsCheckingApiKey(false);
-      return;
-    }
-
-    setIsCheckingApiKey(true);
-
-    const checkInterval = setInterval(async () => {
-      if (window.aistudio) {
-        clearInterval(checkInterval);
-        try {
+  const checkApiKey = useCallback(async () => {
+      if (!window.aistudio) {
+          console.warn("`window.aistudio` not available for API key check.");
+          setHasApiKey(false);
+          try { localStorage.removeItem('feelEdApiKeySelected'); } catch {}
+          setIsCheckingApiKey(false);
+          return;
+      }
+      try {
           const keySelected = await window.aistudio.hasSelectedApiKey();
           setHasApiKey(keySelected);
-          // If the official check reveals no key, the optimistic assumption was wrong.
-          // Clear the flag to ensure the user is prompted again correctly.
-          if (!keySelected) {
-            localStorage.removeItem('apiKeySelectionAttempted');
+          // Sync localStorage with the source of truth.
+          if (keySelected) {
+              localStorage.setItem('feelEdApiKeySelected', 'true');
+          } else {
+              localStorage.removeItem('feelEdApiKeySelected');
           }
-        } catch (e) {
+      } catch (e) {
           console.error("Error checking API key status:", e);
-          setHasApiKey(false); // Assume no key on error
-          localStorage.removeItem('apiKeySelectionAttempted');
-        } finally {
+          setHasApiKey(false);
+          localStorage.removeItem('feelEdApiKeySelected');
+      } finally {
           setIsCheckingApiKey(false);
+      }
+  }, []);
+
+  useEffect(() => {
+    // This effect runs to verify the API key status against the official source.
+    if (user) {
+        setIsCheckingApiKey(true);
+        // The host environment might take a moment to inject the aistudio object.
+        // We poll for it to be available before checking.
+        if (window.aistudio) {
+            checkApiKey();
+        } else {
+            const intervalId = setInterval(() => {
+                if (window.aistudio) {
+                    clearInterval(intervalId);
+                    checkApiKey();
+                }
+            }, 100);
+            // Cleanup interval if component unmounts
+            return () => clearInterval(intervalId);
         }
-      }
-    }, 200); // Check every 200ms
-
-    // Set a timeout to stop checking after a few seconds if aistudio is not found
-    const checkTimeout = setTimeout(() => {
-      clearInterval(checkInterval);
-      if (!window.aistudio) {
-        console.warn("`window.aistudio` not found after timeout. Assuming no key.");
-        setHasApiKey(false);
-        setIsCheckingApiKey(false);
-        localStorage.removeItem('apiKeySelectionAttempted');
-      }
-    }, 5000); // Stop after 5 seconds
-
-    return () => {
-      clearInterval(checkInterval);
-      clearTimeout(checkTimeout);
-    };
-  }, [user]);
+    }
+  }, [user, checkApiKey]);
 
 
   if (error) {
@@ -141,36 +152,29 @@ const App: React.FC = () => {
     if (window.google) {
         window.google.accounts.id.disableAutoSelect();
     }
+    // Clear all session-related data from storage.
     localStorage.removeItem('feelEdUser');
-    // Clear the API key persistence flag on logout.
-    localStorage.removeItem('apiKeySelectionAttempted');
+    localStorage.removeItem('feelEdApiKeySelected');
     setUser(null);
+    setHasApiKey(false); // Reset state
   };
 
   const handleSelectKey = async () => {
     if (window.aistudio) {
-      // Set the persistence flag and optimistically update the UI *before* opening the dialog.
-      // This is the key change to break the loop if the dialog causes a reload.
-      localStorage.setItem('apiKeySelectionAttempted', 'true');
-      setHasApiKey(true);
       setApiKeyError(null);
-
       try {
         await window.aistudio.openSelectKey();
         
-        // After the dialog closes, verify the selection to handle cancellation.
-        const isKeyTrulySelected = await window.aistudio.hasSelectedApiKey();
-        
-        if (!isKeyTrulySelected) {
-          // User cancelled. Revert the optimistic state and clear the persistence flag.
-          localStorage.removeItem('apiKeySelectionAttempted');
-          setHasApiKey(false); 
+        // After the dialog closes, re-verify and persist the selection status.
+        const isKeyNowSelected = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(isKeyNowSelected);
+        if (isKeyNowSelected) {
+            localStorage.setItem('feelEdApiKeySelected', 'true');
+        } else {
+            localStorage.removeItem('feelEdApiKeySelected');
         }
-        // If it is truly selected, our optimistic state was correct, so do nothing.
       } catch (e) {
         console.error("Error with select key dialog:", e);
-        // If the process failed, revert and clear persistence.
-        localStorage.removeItem('apiKeySelectionAttempted');
         setHasApiKey(false);
         const keyError = new Error("Could not open the API key selection dialog. Please try again.");
         keyError.name = "UI Error";
@@ -213,9 +217,11 @@ const App: React.FC = () => {
         console.error(err);
 
         // Special handling for invalid API keys to avoid the error boundary and show an inline message.
-        if (err.message && err.message.includes("Requested entity was not found")) {
-            localStorage.removeItem('apiKeySelectionAttempted'); // Clear persistence on failure.
+        if (err.message && (err.message.includes("API key not valid") || err.message.includes("provide an API key"))) {
             setHasApiKey(false); // Force the user to re-select a key.
+            try {
+              localStorage.removeItem('feelEdApiKeySelected');
+            } catch {}
             setApiKeyError("Your selected API key is invalid or has been revoked. Please select a new, valid key to continue.");
         } else {
             // Handle all other errors with the main error boundary.
