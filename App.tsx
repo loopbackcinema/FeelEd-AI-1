@@ -6,6 +6,7 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoginScreen } from './components/LoginScreen';
 import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
+import { ApiKeyModal } from './components/ApiKeyModal';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
@@ -244,46 +245,13 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (isCheckingApiKey) {
-        return <Loader />;
+      return <Loader />;
     }
-    
-    if (user && !hasApiKey) {
-        if (userRole === 'Student') {
-            return <StudentApiKeyMessage />;
-        }
-        return (
-            <div className="flex flex-col items-center justify-center text-center animate-fade-in-up py-12">
-                <h2 className="text-2xl font-bold text-gray-800 tracking-tight">API Key Required</h2>
-                <p className="mt-2 text-lg text-gray-600 max-w-md">
-                    To use FeelEd AI, you need to select a Gemini API key for your project.
-                </p>
-                {apiKeyError && (
-                    <div className="mt-4 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg max-w-md text-left text-sm" role="alert">
-                        <p className="font-bold">Invalid API Key</p>
-                        <p>{apiKeyError}</p>
-                    </div>
-                )}
-                {envError && (
-                     <div className="mt-4 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-lg max-w-md text-left text-sm" role="alert">
-                        <p className="font-bold">Connection Issue</p>
-                        <p>{envError}</p>
-                    </div>
-                )}
-                <p className="mt-4 text-sm text-gray-500 max-w-md">
-                    This enables the app to use Google's generative models. Standard API usage rates apply. 
-                    <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more about billing</a>.
-                </p>
-                <button
-                    onClick={handleSelectKey}
-                    disabled={!!envError}
-                    className="mt-6 flex items-center justify-center gap-3 px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Select API Key
-                </button>
-            </div>
-        );
+
+    if (user && !hasApiKey && userRole === 'Student') {
+      return <StudentApiKeyMessage />;
     }
-    
+
     if (isLoading) {
       if (streamingStory && Object.keys(streamingStory).length > 0) {
         return <StoryOutput story={streamingStory} audioUrl={null} onReset={handleReset} isStreaming={true} />;
@@ -294,6 +262,8 @@ const App: React.FC = () => {
     if (story && audioUrl) {
       return <StoryOutput story={story} audioUrl={audioUrl} onReset={handleReset} />;
     }
+
+    const isFormDisabled = isLoading || (!!user && !hasApiKey && userRole !== 'Student');
 
     return (
       <StoryInputForm
@@ -308,7 +278,7 @@ const App: React.FC = () => {
         userRole={userRole}
         setUserRole={setUserRole}
         onSubmit={handleSubmit}
-        isLoading={isLoading}
+        isLoading={isFormDisabled}
       />
     );
   };
@@ -326,6 +296,13 @@ const App: React.FC = () => {
         </main>
         <Footer />
       </div>
+      {user && !hasApiKey && userRole !== 'Student' && !isCheckingApiKey && (
+        <ApiKeyModal 
+            handleSelectKey={handleSelectKey} 
+            apiKeyError={apiKeyError}
+            envError={envError}
+        />
+      )}
     </div>
   );
 };
