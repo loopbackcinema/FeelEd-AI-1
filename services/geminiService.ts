@@ -9,12 +9,10 @@ const transcriptionModel = 'gemini-2.5-flash-native-audio-preview-09-2025';
 
 // --- Helper function to get the AI client ---
 const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    // This error will be caught by the calling function's try/catch block
-    throw new APIError("The application is missing the required API key. Please configure it in the deployment environment.");
-  }
-  return new GoogleGenAI({ apiKey });
+  // The API key is sourced from process.env.API_KEY, which is automatically
+  // managed by the execution environment. The explicit check has been removed
+  // to align with the platform's key management strategy.
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 
