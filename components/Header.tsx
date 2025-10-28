@@ -1,31 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { User } from '../types';
-import { GoogleIcon } from './icons/GoogleIcon';
 
 interface HeaderProps {
   user: User | null;
-  onLogin: (user: User) => void;
   onLogout: () => void;
 }
 
-// Simple JWT decoder
-function jwtDecode<T>(token: string): T {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-    return JSON.parse(jsonPayload);
-}
-
-// A generic, gray SVG avatar for guest users, encoded as a data URI.
-const GUEST_AVATAR_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0EwQTBCMyI+PHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bTAgM2MxLjY2IDAgMyAxLjM0IDMgM3MtMS4zNCAzLTMgMy0zLTEuMzQtMy0zIDEuMzQtMyAzIDN6bTAgMTRjLTIuMDMgMC0zLjg0LS44MS01LjE1LTIuMTFDOC4yOCAxNS40NSAxMC4xMyAxNSAxMiAxNXMzLjcyLjQ1IDUuMTUgMS44OUMxNS44NCAxOC4xOSAxNC4wMyAxOSAxMiAxOXoiLz48L3N2Zz4=';
-
-
-export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const googleButtonRef = useRef<HTMLDivElement>(null);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -39,50 +22,6 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [dropdownRef]);
-
-    // Google Sign-In initialization
-    useEffect(() => {
-        if (!user && (window as any).google) {
-            const google = (window as any).google;
-            google.accounts.id.initialize({
-                // IMPORTANT: Replace this with your actual Google Client ID.
-                // DO NOT use a Client Secret here. It is a major security risk.
-                client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
-                callback: (response: any) => {
-                    const decoded: { name: string, email: string, picture: string } = jwtDecode(response.credential);
-                    onLogin({
-                        name: decoded.name,
-                        email: decoded.email,
-                        picture: decoded.picture
-                    });
-                }
-            });
-
-            if (googleButtonRef.current) {
-                google.accounts.id.renderButton(
-                    googleButtonRef.current,
-                    { theme: "outline", size: "large", type: "standard", shape: "pill" }
-                );
-            }
-        }
-    }, [user, onLogin]);
-
-    const handleLogoutClick = () => {
-        // Clear Google's session state to allow re-login
-        if ((window as any).google) {
-            (window as any).google.accounts.id.disableAutoSelect();
-        }
-        onLogout();
-    }
-    
-    const handleGuestLogin = () => {
-        onLogin({
-            name: 'Guest User',
-            email: 'guest@feeled.ai',
-            picture: GUEST_AVATAR_URL,
-        });
-    };
-
 
   return (
     <header className="py-6 flex justify-between items-center">
@@ -99,7 +38,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
         </div>
         
         <div className="flex-none">
-            {user ? (
+            {user && (
                  <div className="relative" ref={dropdownRef}>
                     <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 p-2 rounded-full hover:bg-gray-200/50 transition-colors">
                         <img src={user.picture} alt={user.name} className="w-10 h-10 rounded-full border-2 border-white shadow-md"/>
@@ -115,28 +54,13 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogin, onLogout }) => {
                                     <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
                                     <p className="text-xs text-gray-500 truncate">{user.email}</p>
                                 </div>
-                                <button onClick={handleLogoutClick} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                                     Logout
                                 </button>
                             </div>
                         </div>
                     )}
                  </div>
-            ) : (
-                <div className="flex flex-col items-center">
-                    <div ref={googleButtonRef}></div>
-                    <div className="relative flex items-center w-full max-w-[190px] my-2">
-                        <div className="flex-grow border-t border-gray-300"></div>
-                        <span className="flex-shrink mx-2 text-xs text-gray-500">OR</span>
-                        <div className="flex-grow border-t border-gray-300"></div>
-                    </div>
-                    <button
-                        onClick={handleGuestLogin}
-                        className="px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-300 rounded-full hover:bg-gray-100 transition-colors"
-                    >
-                        Continue as Guest
-                    </button>
-                </div>
             )}
         </div>
     </header>

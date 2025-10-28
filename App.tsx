@@ -7,7 +7,7 @@ import { Footer } from './components/Footer';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
-import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES } from './constants';
+import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, GUEST_AVATAR_URL } from './constants';
 
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
@@ -26,15 +26,25 @@ const App: React.FC = () => {
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Check for persisted user session
+    // Check for persisted user session or create a new guest session
     try {
       const storedUser = localStorage.getItem('feelEdUser');
       if (storedUser) {
         setUser(JSON.parse(storedUser));
+      } else {
+        const guestUser: User = {
+            name: 'Guest User',
+            email: 'guest@feeled.ai',
+            picture: GUEST_AVATAR_URL,
+        };
+        setUser(guestUser);
+        localStorage.setItem('feelEdUser', JSON.stringify(guestUser));
       }
     } catch (e) {
-      console.error("Failed to parse user from localStorage", e);
+      console.error("Failed to process user session", e);
       localStorage.removeItem('feelEdUser');
+      // Force a clean guest session if storage is corrupted
+      window.location.reload();
     }
 
     // Check for API key
@@ -44,8 +54,6 @@ const App: React.FC = () => {
         setHasApiKey(selected);
       });
     } else {
-      // If the aistudio object isn't available, we assume the key is directly injected.
-      // If API calls fail later, our error handling will catch it.
       setHasApiKey(true);
     }
   }, []);
@@ -73,15 +81,9 @@ const App: React.FC = () => {
     }
   };
 
-
-  const handleLogin = (loggedInUser: User) => {
-    setUser(loggedInUser);
-    localStorage.setItem('feelEdUser', JSON.stringify(loggedInUser));
-  };
-
   const handleLogout = () => {
-    setUser(null);
     localStorage.removeItem('feelEdUser');
+    window.location.reload(); // Easiest way to reset to a new guest session
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -121,8 +123,6 @@ const App: React.FC = () => {
             (err.message.includes("API Key must be set") || err.message.includes("Requested entity was not found"))) {
             setHasApiKey(false); // Reset key state to re-prompt user
         } else {
-            // For all other errors, create a new Error object and set it in state.
-            // The next render will throw this, triggering the Error Boundary.
             let title = "An Unexpected Error Occurred";
             let message = "Something went wrong. Please try again. If the problem persists, contact support.";
 
@@ -154,7 +154,7 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (hasApiKey === null) {
+    if (hasApiKey === null || user === null) {
       return (
         <div className="flex justify-center items-center p-10">
           <div className="w-8 h-8 border-2 border-t-2 border-t-purple-600 border-gray-200 rounded-full animate-spin"></div>
@@ -196,7 +196,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 text-gray-900">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <Header user={user} onLogin={handleLogin} onLogout={handleLogout} />
+        <Header user={user} onLogout={handleLogout} />
         <main className="mt-4 bg-white/70 backdrop-blur-xl p-6 sm:p-10 rounded-3xl shadow-lg border border-gray-200/50">
           {renderContent()}
         </main>
