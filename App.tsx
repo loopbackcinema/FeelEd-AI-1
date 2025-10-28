@@ -4,7 +4,7 @@ import { StoryOutput } from './components/StoryOutput';
 import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { LoginModal } from './components/LoginModal';
+import { LoginScreen } from './components/LoginScreen';
 import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
@@ -41,21 +41,11 @@ const App: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   const [user, setUser] = useState<User | null>(null);
   
-  // State is now initialized optimistically from localStorage to provide a
-  // smoother experience on page reloads. It is still verified with the
-  // aistudio environment.
-  const [hasApiKey, setHasApiKey] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('feelEdApiKeySelected') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
+  // State is now simplified. The app always verifies the key with the environment on load.
+  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
   const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [envError, setEnvError] = useState<string | null>(null);
@@ -82,23 +72,15 @@ const App: React.FC = () => {
       if (!window.aistudio) {
           console.warn("`window.aistudio` not available for API key check.");
           setHasApiKey(false);
-          try { localStorage.removeItem('feelEdApiKeySelected'); } catch {}
           setIsCheckingApiKey(false);
           return;
       }
       try {
           const keySelected = await window.aistudio.hasSelectedApiKey();
           setHasApiKey(keySelected);
-          // Sync localStorage with the source of truth.
-          if (keySelected) {
-              localStorage.setItem('feelEdApiKeySelected', 'true');
-          } else {
-              localStorage.removeItem('feelEdApiKeySelected');
-          }
       } catch (e) {
           console.error("Error checking API key status:", e);
           setHasApiKey(false);
-          localStorage.removeItem('feelEdApiKeySelected');
       } finally {
           setIsCheckingApiKey(false);
       }
@@ -156,7 +138,6 @@ const App: React.FC = () => {
       };
       localStorage.setItem('feelEdUser', JSON.stringify(newUser));
       setUser(newUser);
-      setShowLoginModal(false);
     } catch (e) {
       console.error("Failed to parse credential or save user session", e);
       setError(new Error("There was a problem signing you in. Please try again."));
@@ -170,7 +151,6 @@ const App: React.FC = () => {
     }
     // Clear all session-related data from storage.
     localStorage.removeItem('feelEdUser');
-    localStorage.removeItem('feelEdApiKeySelected');
     setUser(null);
     setHasApiKey(false); // Reset state
   };
@@ -182,14 +162,10 @@ const App: React.FC = () => {
       try {
         await window.aistudio.openSelectKey();
         
-        // After the dialog closes, re-verify and persist the selection status.
+        // After the dialog closes, re-verify the selection status directly from the source of truth.
         const isKeyNowSelected = await window.aistudio.hasSelectedApiKey();
         setHasApiKey(isKeyNowSelected);
-        if (isKeyNowSelected) {
-            localStorage.setItem('feelEdApiKeySelected', 'true');
-        } else {
-            localStorage.removeItem('feelEdApiKeySelected');
-        }
+
       } catch (e) {
         console.error("Error with select key dialog:", e);
         setHasApiKey(false);
@@ -202,11 +178,6 @@ const App: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!user) {
-        setShowLoginModal(true);
-        return;
-    }
     
     setApiKeyError(null); // Clear previous API key errors on a new submission.
     setEnvError(null);
@@ -237,9 +208,6 @@ const App: React.FC = () => {
         // Special handling for invalid API keys to avoid the error boundary and show an inline message.
         if (err.message && (err.message.includes("API key not valid") || err.message.includes("provide an API key"))) {
             setHasApiKey(false); // Force the user to re-select a key.
-            try {
-              localStorage.removeItem('feelEdApiKeySelected');
-            } catch {}
             setApiKeyError("Your selected API key is invalid or has been revoked. Please select a new, valid key to continue.");
         } else {
             // Handle all other errors with the main error boundary.
@@ -345,6 +313,10 @@ const App: React.FC = () => {
     );
   };
 
+  if (!user) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 text-gray-900">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -354,12 +326,6 @@ const App: React.FC = () => {
         </main>
         <Footer />
       </div>
-      {showLoginModal && (
-        <LoginModal 
-            onLoginSuccess={handleLoginSuccess}
-            onClose={() => setShowLoginModal(false)}
-        />
-      )}
     </div>
   );
 };
