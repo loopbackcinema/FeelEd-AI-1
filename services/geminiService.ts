@@ -161,7 +161,7 @@ export async function generateStoryAndAudio(
 
     const ttsResponse = await ai.models.generateContent({
         model: ttsModel,
-        contents: [{ parts: [{ text: storyTextForTts }] }],
+        contents: { parts: [{ text: storyTextForTts }] },
         config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: {
