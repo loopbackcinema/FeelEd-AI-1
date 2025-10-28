@@ -4,7 +4,7 @@ import { StoryOutput } from './components/StoryOutput';
 import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { LoginScreen } from './components/LoginScreen';
+import { LoginModal } from './components/LoginModal';
 import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { generateStoryAndAudio } from './services/geminiService';
@@ -44,6 +44,10 @@ const App: React.FC = () => {
   const [error, setError] = useState<Error | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [guestStoryCount, setGuestStoryCount] = useState<number>(
+    () => Number(localStorage.getItem('guestStoryCount') || 0)
+  );
   
   // State is now simplified. The app always verifies the key with the environment on load.
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
@@ -139,6 +143,9 @@ const App: React.FC = () => {
       };
       localStorage.setItem('feelEdUser', JSON.stringify(newUser));
       setUser(newUser);
+      setShowLoginModal(false);
+      setGuestStoryCount(0);
+      localStorage.removeItem('guestStoryCount');
     } catch (e) {
       console.error("Failed to parse credential or save user session", e);
       setError(new Error("There was a problem signing you in. Please try again."));
@@ -152,7 +159,9 @@ const App: React.FC = () => {
     }
     // Clear all session-related data from storage.
     localStorage.removeItem('feelEdUser');
+    localStorage.removeItem('guestStoryCount');
     setUser(null);
+    setGuestStoryCount(0);
     setHasApiKey(false); // Reset state
   };
 
@@ -180,6 +189,11 @@ const App: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!user && guestStoryCount >= 1) {
+        setShowLoginModal(true);
+        return;
+    }
+    
     setApiKeyError(null); // Clear previous API key errors on a new submission.
     setEnvError(null);
 
@@ -203,6 +217,13 @@ const App: React.FC = () => {
       const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, handleStoryUpdate);
       setStory(result.story);
       setAudioUrl(result.audioUrl);
+      
+      if (!user) {
+          const newCount = guestStoryCount + 1;
+          setGuestStoryCount(newCount);
+          localStorage.setItem('guestStoryCount', String(newCount));
+      }
+
     } catch (err: any) {
         console.error(err);
 
@@ -244,7 +265,7 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (isCheckingApiKey) {
+    if (isCheckingApiKey && user) {
       return <Loader />;
     }
 
@@ -283,10 +304,6 @@ const App: React.FC = () => {
     );
   };
 
-  if (!user) {
-    return <LoginScreen onLoginSuccess={handleLoginSuccess} />
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 text-gray-900">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -296,6 +313,14 @@ const App: React.FC = () => {
         </main>
         <Footer />
       </div>
+      
+      {showLoginModal && (
+        <LoginModal 
+            onLoginSuccess={handleLoginSuccess}
+            onDismiss={() => setShowLoginModal(false)}
+        />
+      )}
+
       {user && !hasApiKey && userRole !== 'Student' && !isCheckingApiKey && (
         <ApiKeyModal 
             handleSelectKey={handleSelectKey} 

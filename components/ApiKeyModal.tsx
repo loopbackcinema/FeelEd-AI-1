@@ -10,9 +10,9 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ handleSelectKey, apiKe
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full m-4 text-center transform transition-all animate-fade-in-up">
-        <h2 className="text-2xl font-bold text-gray-800 tracking-tight">API Key Required</h2>
+        <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Connect the AI Engine</h2>
         <p className="mt-2 text-base text-gray-600">
-          To use FeelEd AI, you need to select a Gemini API key for your project.
+          To create magical learning stories, FeelEd AI needs permission to use Google's AI.
         </p>
 
         {apiKeyError && (
@@ -30,8 +30,8 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ handleSelectKey, apiKe
         )}
 
         <p className="mt-4 text-sm text-gray-500">
-          This enables the app to use Google's generative models. Standard API usage rates apply.
-          <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more about billing</a>.
+          Please select an API key to make the connection. Standard usage rates will apply to your project.
+          <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline ml-1">Learn more</a>.
         </p>
 
         <button
