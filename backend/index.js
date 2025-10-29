@@ -55,11 +55,15 @@ Generate the story now.
             contents: storyPrompt,
         });
 
-        const storyMarkdown = storyResponse.text;
-
-        if (!storyMarkdown) {
-            return res.status(500).json({ error: 'Failed to generate story content.' });
+        if (!storyResponse.candidates || storyResponse.candidates.length === 0) {
+            console.error("Story generation was blocked or returned no candidates.", JSON.stringify(storyResponse, null, 2));
+            const blockReason = storyResponse.promptFeedback?.blockReason;
+            const errorMessage = blockReason
+                ? `Story generation was blocked due to: ${blockReason}. Please try a different topic.`
+                : 'The AI failed to generate story content. It might be a temporary issue.';
+            return res.status(500).json({ error: errorMessage });
         }
+        const storyMarkdown = storyResponse.text;
         
         // --- Steps 2 & 3 in Parallel ---
 
@@ -81,7 +85,14 @@ Generate the story now.
                         },
                     },
                 });
-                return audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+
+                if (!audioResponse.candidates || audioResponse.candidates.length === 0) {
+                    console.error("TTS generation was blocked or returned no candidates.", JSON.stringify(audioResponse, null, 2));
+                    return null;
+                }
+                const audioPart = audioResponse.candidates[0].content?.parts?.find(p => p.inlineData);
+                return audioPart?.inlineData?.data || null;
+
             } catch (error) {
                 console.error('Error generating TTS audio:', error);
                 return null; // Return null on failure
@@ -113,13 +124,13 @@ Do not include any text or words in the image.
                     },
                 });
     
-                // Extract image data from the response
-                for (const part of imageResponse.candidates[0].content.parts) {
-                    if (part.inlineData) {
-                        return part.inlineData.data; // This is the base64 string
-                    }
+                if (!imageResponse.candidates || imageResponse.candidates.length === 0) {
+                    console.warn("Image generation was blocked or returned no candidates.", JSON.stringify(imageResponse, null, 2));
+                    return null;
                 }
-                return null; // No image found
+                const imagePart = imageResponse.candidates[0].content?.parts?.find(p => p.inlineData);
+                return imagePart?.inlineData?.data || null;
+
             } catch (imageError) {
                 console.error('Error generating illustration:', imageError);
                 return null; // Non-fatal error: If image generation fails, proceed without it.
@@ -131,7 +142,7 @@ Do not include any text or words in the image.
 
         // Audio is essential, so fail the request if it couldn't be generated.
         if (!audioBase64) {
-            return res.status(500).json({ error: 'Failed to generate audio narration.' });
+            return res.status(500).json({ error: 'Failed to generate audio narration. The AI may have had an issue with the voice model.' });
         }
         
         // Step 4: Send all assets back to the client
@@ -142,8 +153,8 @@ Do not include any text or words in the image.
         });
 
     } catch (error) {
-        console.error('Error in /generate-story:', error);
-        res.status(500).json({ error: error.message || 'An internal server error occurred.' });
+        console.error('Critical error in /generate-story:', error);
+        res.status(500).json({ error: 'A critical error occurred on the server while communicating with the AI. Please check the server logs for details.' });
     }
 });
 
@@ -179,17 +190,18 @@ app.post('/transcribe-audio', async (req, res) => {
             contents: { parts: [audioPart, textPart] },
         });
 
-        const transcription = response.text;
-
-        if (transcription === undefined) {
-            return res.status(500).json({ error: 'Could not get transcription from AI.' });
+        if (!response.candidates || response.candidates.length === 0) {
+            console.error("Transcription was blocked or returned no candidates.", JSON.stringify(response, null, 2));
+            return res.status(500).json({ error: 'The AI could not process the audio.' });
         }
+
+        const transcription = response.text;
         
         res.json({ transcription });
 
     } catch (error) {
         console.error('Error in /transcribe-audio:', error);
-        res.status(500).json({ error: error.message || 'An internal server error occurred during transcription.' });
+        res.status(500).json({ error: 'A critical error occurred on the server during transcription.' });
     }
 });
 
