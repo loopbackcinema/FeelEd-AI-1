@@ -1,3 +1,4 @@
+
 import type { Story } from '../types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
 
@@ -69,6 +70,10 @@ function pcmToWav(pcmData: Uint8Array): Blob {
     return new Blob([view], { type: 'audio/wav' });
 }
 
+/**
+ * A robust parser for the AI's story markdown output.
+ * It uses a regular expression to handle variations in formatting.
+ */
 function parseStoryFromMarkdown(markdown: string): Partial<Story> {
   const story: Partial<Story> = {};
   const headingMap: Record<string, keyof Story> = {
@@ -79,31 +84,34 @@ function parseStoryFromMarkdown(markdown: string): Partial<Story> {
     'resolution': 'resolution',
     'moral message': 'moral_message',
   };
-  const sections = markdown.trim().split(/^\s*#\s+/m);
 
-  for (const section of sections) {
-    if (!section.trim()) continue;
-    const firstNewlineIndex = section.indexOf('\n');
-    let heading: string;
-    let content: string;
+  // Regex to capture a heading and the content that follows until the next heading or end of string.
+  // It handles optional colons and extra whitespace.
+  const sectionRegex = /#\s+([^:\n]+):?\s*\n([\s\S]*?)(?=#\s+|$)/g;
 
-    if (firstNewlineIndex === -1) {
-      heading = section.trim();
-      content = '';
-    } else {
-      heading = section.substring(0, firstNewlineIndex).trim();
-      content = section.substring(firstNewlineIndex + 1).trim();
-    }
-
-    const normalizedHeading = heading.toLowerCase().replace(/:$/, '').trim();
-    const storyKey = headingMap[normalizedHeading];
+  let match;
+  while ((match = sectionRegex.exec(markdown)) !== null) {
+    const heading = match[1].trim().toLowerCase();
+    const content = match[2].trim();
     
+    const storyKey = headingMap[heading];
     if (storyKey) {
       story[storyKey] = content;
     }
   }
+
+  // A special case for the title, which might be on the same line
+  // e.g., # Title: My Awesome Story
+  if (!story.title) {
+    const titleMatch = markdown.match(/#\s+Title:\s*(.*)/i);
+    if (titleMatch && titleMatch[1]) {
+        story.title = titleMatch[1].trim();
+    }
+  }
+
   return story;
 }
+
 
 export async function generateStoryAndAudio(
   topic: string,
@@ -152,8 +160,12 @@ export async function generateStoryAndAudio(
     const story: Story = parseStoryFromMarkdown(storyMarkdown) as Story;
     story.emotion_tone = emotion;
     
-    if (Object.keys(story).length < 6) { // title + 5 parts
-      throw new StoryGenerationError("The AI didn't generate a complete story structure. Please try again or adjust your topic.");
+    const requiredKeys: (keyof Story)[] = ['title', 'introduction', 'concept_explanation', 'resolution', 'moral_message'];
+    const missingKeys = requiredKeys.filter(key => !story[key] || !story[key]?.trim());
+
+    if (missingKeys.length > 0) {
+      console.warn(`AI story generation was incomplete. Missing sections: ${missingKeys.join(', ')}`);
+      throw new StoryGenerationError(`The AI didn't generate a complete story. It missed the following sections: ${missingKeys.join(', ')}. Please try again.`);
     }
 
     const pcmData = decode(audioBase64);
