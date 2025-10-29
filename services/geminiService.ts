@@ -119,25 +119,42 @@ export async function generateStory(
     throw new NetworkError();
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 9500); // 9.5-second timeout for Vercel Hobby tier
-
   try {
     const response = await fetch(`/api/generate-story`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, grade, language, emotion, userRole }),
-      signal: controller.signal,
     });
-    
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'The AI service failed with an unknown error.' }));
-      throw new APIError(errorData.error || `The AI service failed with status: ${response.status}.`);
+        // We attempt to get a JSON error message, but fallback gracefully.
+        const errorText = await response.text();
+        let errorMsg = `The AI service failed with status: ${response.status}.`;
+        try {
+            const errorJson = JSON.parse(errorText);
+            errorMsg = errorJson.error || errorMsg;
+        } catch (e) {
+            // The error response wasn't JSON, which can happen with server errors (e.g., HTML error pages).
+            // We'll use the status text as a fallback.
+            errorMsg = response.statusText || errorMsg;
+        }
+        throw new APIError(errorMsg);
+    }
+    
+    // Handle the streaming response
+    if (!response.body) {
+        throw new StoryGenerationError("The AI service returned an empty response.");
     }
 
-    const { storyMarkdown } = await response.json();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let storyMarkdown = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        storyMarkdown += decoder.decode(value, { stream: true });
+    }
 
     if (!storyMarkdown) {
         throw new StoryGenerationError("The AI didn't generate a story. Please try adjusting your topic.");
@@ -155,14 +172,11 @@ export async function generateStory(
 
     return { story, storyMarkdown };
   } catch (error: any) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-        throw new APIError("The request to generate the story timed out. The AI might be under heavy load. Please try again.");
-    }
     console.error("Error communicating with API for story generation:", error);
     if (error instanceof AppError) {
       throw error;
     }
+    // "Failed to fetch" is a common network-level error.
     throw new APIError(`An unexpected issue occurred. Please check your connection and try again. Details: ${error.message}`);
   }
 }
