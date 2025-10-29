@@ -3,7 +3,7 @@ import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from
 
 // This is a placeholder for your BFF's base URL.
 // In a real deployment, this would be the URL of your Google Cloud Function or other backend service.
-const BFF_BASE_URL = 'https://us-central1-your-project-id.cloudfunctions.net/api';
+const BFF_BASE_URL = 'https://feeled-ai-emotional-story-based-learning-208105784717.us-west1.run.app';
 
 
 // --- Helper functions for WAV conversion (remain on frontend) ---
