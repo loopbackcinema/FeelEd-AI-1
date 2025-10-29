@@ -89,11 +89,46 @@ Generate the story now.
         if (!audioBase64) {
             return res.status(500).json({ error: 'Failed to generate audio narration.' });
         }
+
+        // Step 3: Generate an illustration
+        let imageBase64 = null;
+        try {
+            const titleMatch = storyMarkdown.match(/# Title: (.*)/);
+            const introductionMatch = storyMarkdown.match(/# Introduction:([\s\S]*?)# Emotional Trigger:/);
+            const title = titleMatch ? titleMatch[1] : topic;
+            const introduction = introductionMatch ? introductionMatch[1].trim() : '';
+
+            const imagePrompt = `
+Generate a vibrant, child-friendly, storybook illustration.
+Style: Whimsical, colorful, digital painting, soft lighting, suitable for a children's educational story.
+Scene: ${title}. ${introduction}
+Do not include any text or words in the image.
+`;
+
+            const imageResponse = await ai.models.generateImages({
+                model: 'imagen-4.0-generate-001',
+                prompt: imagePrompt,
+                config: {
+                    numberOfImages: 1,
+                    outputMimeType: 'image/jpeg',
+                    aspectRatio: '16:9',
+                },
+            });
+
+            if (imageResponse.generatedImages && imageResponse.generatedImages.length > 0) {
+                imageBase64 = imageResponse.generatedImages[0].image.imageBytes;
+            }
+        } catch (imageError) {
+            console.error('Error generating illustration:', imageError);
+            // Non-fatal error: If image generation fails, proceed without it.
+            imageBase64 = null;
+        }
         
-        // Step 3: Send both back to the client
+        // Step 4: Send all assets back to the client
         res.json({
             storyMarkdown,
-            audioBase64
+            audioBase64,
+            imageBase64,
         });
 
     } catch (error) {

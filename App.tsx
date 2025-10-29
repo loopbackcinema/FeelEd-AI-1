@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -34,6 +35,7 @@ const App: React.FC = () => {
 
   const [story, setStory] = useState<Story | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -74,12 +76,14 @@ const App: React.FC = () => {
     setIsLoading(true);
     setStory(null);
     setAudioUrl(null);
+    setImageUrl(null);
 
     try {
       // The streaming callback is no longer needed with the BFF architecture.
       const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, voice);
       setStory(result.story);
       setAudioUrl(result.audioUrl);
+      setImageUrl(result.imageUrl);
       
       if (!user) {
           const newCount = guestStoryCount + 1;
@@ -164,6 +168,7 @@ const App: React.FC = () => {
   const handleReset = () => {
     setStory(null);
     setAudioUrl(null);
+    setImageUrl(null);
     setTopic('');
   };
 
@@ -172,8 +177,8 @@ const App: React.FC = () => {
       return <Loader />;
     }
 
-    if (story && audioUrl) {
-      return <StoryOutput story={story} audioUrl={audioUrl} onReset={handleReset} />;
+    if (story) {
+      return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} />;
     }
 
     return (

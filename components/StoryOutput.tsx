@@ -5,6 +5,7 @@ import { ShareIcon } from './icons/ShareIcon';
 interface StoryOutputProps {
   story: Partial<Story>;
   audioUrl: string | null;
+  imageUrl: string | null;
   onReset: () => void;
 }
 
@@ -24,7 +25,7 @@ const StorySection: React.FC<{ title: string; content?: string }> = ({ title, co
 );
 
 
-export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onReset }) => {
+export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, imageUrl, onReset }) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleShare = async () => {
@@ -70,6 +71,16 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onRes
       <div className="text-center">
         <h2 className="text-4xl font-bold text-gray-800 tracking-tight">{story.title || 'Generating Title...'}</h2>
         {story.emotion_tone && <p className="mt-2 text-lg text-indigo-600 font-medium">{story.emotion_tone} Story</p>}
+      </div>
+
+      <div className="w-full aspect-video bg-gray-200 rounded-2xl shadow-lg overflow-hidden animate-fade-in">
+        {imageUrl ? (
+          <img src={imageUrl} alt={story.title || 'Story illustration'} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse flex items-center justify-center">
+             <p className="text-gray-500 font-medium">Generating illustration...</p>
+          </div>
+        )}
       </div>
 
       <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 sticky top-4 z-10">

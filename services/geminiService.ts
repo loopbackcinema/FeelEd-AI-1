@@ -112,7 +112,7 @@ export async function generateStoryAndAudio(
   emotion: string,
   userRole: string,
   voice: string
-): Promise<{ story: Story; audioUrl: string }> {
+): Promise<{ story: Story; audioUrl: string; imageUrl: string | null }> {
   if (!navigator.onLine) {
     throw new NetworkError();
   }
@@ -134,7 +134,7 @@ export async function generateStoryAndAudio(
       throw new APIError(errorData.error || `The AI service failed with status: ${response.status}.`);
     }
 
-    const { storyMarkdown, audioBase64 } = await response.json();
+    const { storyMarkdown, audioBase64, imageBase64 } = await response.json();
 
     if (!storyMarkdown) {
         throw new StoryGenerationError("The AI didn't generate a story. Please try adjusting your topic.");
@@ -154,7 +154,12 @@ export async function generateStoryAndAudio(
     const wavBlob = pcmToWav(pcmData);
     const audioUrl = URL.createObjectURL(wavBlob);
 
-    return { story, audioUrl };
+    let imageUrl: string | null = null;
+    if (imageBase64) {
+      imageUrl = `data:image/jpeg;base64,${imageBase64}`;
+    }
+
+    return { story, audioUrl, imageUrl };
   } catch (error: any) {
     console.error("Error communicating with BFF for story generation:", error);
     if (error instanceof AppError) {
