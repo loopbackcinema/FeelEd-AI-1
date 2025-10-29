@@ -10,14 +10,11 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 const getAIClient = () => {
-    // The API key for the backend is expected to be in the `API_KEY` environment variable.
-    // This aligns with the naming conventions typically used in the deployment environment.
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        // This error will be thrown if the API_KEY is not configured in the Cloud Run service.
-        throw new Error("API_KEY environment variable not set on the backend service.");
-    }
-    return new GoogleGenAI({ apiKey });
+    // This initializes the client using Application Default Credentials (ADC).
+    // It automatically uses the service account attached to this Cloud Run service.
+    // This is the recommended authentication method for Google Cloud environments.
+    // Ensure the service account has the "Vertex AI User" role granted in IAM.
+    return new GoogleGenAI();
 };
 
 // Endpoint to generate both the story and the audio
