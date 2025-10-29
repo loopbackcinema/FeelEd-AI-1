@@ -4,12 +4,17 @@
   "private": true,
   "description": "FeelEd AI application, structured for Vercel deployment.",
   "scripts": {
-    "dev": "echo 'Run the frontend dev server'",
-    "build": "echo 'Vercel will build the frontend automatically'",
-    "start": "echo 'Vercel will serve the application'"
+    "dev": "vite",
+    "build": "vite build",
+    "start": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^1.27.0"
+    "@google/genai": "^1.27.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3"
   },
   "engines": {
     "node": "20"
