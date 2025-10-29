@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -9,7 +9,7 @@ interface State {
   error: Error | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundary extends React.Component<Props, State> {
   // Fix: Use a class property to initialize state. This is a more modern
   // and concise approach that avoids constructor boilerplate and correctly
   // types `this.state`.
@@ -60,6 +60,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
     
+    // Fix: Correctly access props via this.props. The original error was likely due to a TypeScript configuration issue.
     return this.props.children;
   }
 }

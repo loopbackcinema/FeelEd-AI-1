@@ -5,7 +5,7 @@ const { GoogleGenAI, Modality } = require('@google/genai');
 const app = express();
 
 // IMPORTANT: In a real production environment, you would restrict this
-// to your frontend's domain.
+// to your frontend's domain. For now, this is open.
 app.use(cors()); 
 app.use(express.json({ limit: '10mb' }));
 
@@ -139,7 +139,9 @@ app.post('/transcribe-audio', async (req, res) => {
     }
 });
 
-
-// This is the entry point for the Google Cloud Function
-// By exporting `api`, you are telling Cloud Functions to serve the Express app.
-exports.api = app;
+// This is the required entry point for Google Cloud Run
+// It starts a server and listens for requests on the port specified by the environment.
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+});
