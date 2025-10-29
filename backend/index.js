@@ -66,69 +66,78 @@ Generate the story now.
             return res.status(500).json({ error: 'Failed to generate story content.' });
         }
         
-        // Step 2: Generate the TTS audio from the generated story
-        const ttsPrompt = `Read the following story in a ${emotion} tone.`;
-        
-        const fullTextForTTS = `${ttsPrompt}\n\n${storyMarkdown.replace(/^#\s/gm, '')}`;
+        // --- Steps 2 & 3 in Parallel ---
 
-        const audioResponse = await ai.models.generateContent({
-            model: "gemini-2.5-flash-preview-tts",
-            contents: [{ parts: [{ text: fullTextForTTS }] }],
-            config: {
-                responseModalities: [Modality.AUDIO],
-                speechConfig: {
-                    voiceConfig: {
-                        prebuiltVoiceConfig: { voiceName: voice },
+        // Promise for TTS audio generation
+        const ttsPromise = (async () => {
+            try {
+                const ttsPrompt = `Read the following story in a ${emotion} tone.`;
+                const fullTextForTTS = `${ttsPrompt}\n\n${storyMarkdown.replace(/^#\s/gm, '')}`;
+        
+                const audioResponse = await ai.models.generateContent({
+                    model: "gemini-2.5-flash-preview-tts",
+                    contents: [{ parts: [{ text: fullTextForTTS }] }],
+                    config: {
+                        responseModalities: [Modality.AUDIO],
+                        speechConfig: {
+                            voiceConfig: {
+                                prebuiltVoiceConfig: { voiceName: voice },
+                            },
+                        },
                     },
-                },
-            },
-        });
-        
-        const audioBase64 = audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                });
+                return audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+            } catch (error) {
+                console.error('Error generating TTS audio:', error);
+                return null; // Return null on failure
+            }
+        })();
 
-        if (!audioBase64) {
-            return res.status(500).json({ error: 'Failed to generate audio narration.' });
-        }
-
-        // Step 3: Generate an illustration
-        let imageBase64 = null;
-        try {
-            const titleMatch = storyMarkdown.match(/# Title: (.*)/);
-            const introductionMatch = storyMarkdown.match(/# Introduction:([\s\S]*?)# Emotional Trigger:/);
-            const title = titleMatch ? titleMatch[1] : topic;
-            const introduction = introductionMatch ? introductionMatch[1].trim() : '';
-
-            const imagePrompt = `
+        // Promise for illustration generation
+        const imagePromise = (async () => {
+            try {
+                const titleMatch = storyMarkdown.match(/# Title: (.*)/);
+                const introductionMatch = storyMarkdown.match(/# Introduction:([\s\S]*?)# Emotional Trigger:/);
+                const title = titleMatch ? titleMatch[1] : topic;
+                const introduction = introductionMatch ? introductionMatch[1].trim() : '';
+    
+                const imagePrompt = `
 Generate a vibrant, child-friendly, storybook illustration.
 Style: Whimsical, colorful, digital painting, soft lighting, suitable for a children's educational story.
 Scene: ${title}. ${introduction}
 Do not include any text or words in the image.
 `;
-
-            const imageResponse = await ai.models.generateImages({
-                model: 'imagen-4.0-generate-001',
-                prompt: imagePrompt,
-                config: {
-                    numberOfImages: 1,
-                    outputMimeType: 'image/jpeg',
-                    aspectRatio: '16:9',
-                },
-            });
-
-            if (imageResponse.generatedImages && imageResponse.generatedImages.length > 0) {
-                imageBase64 = imageResponse.generatedImages[0].image.imageBytes;
+    
+                const imageResponse = await ai.models.generateImages({
+                    model: 'imagen-4.0-generate-001',
+                    prompt: imagePrompt,
+                    config: {
+                        numberOfImages: 1,
+                        outputMimeType: 'image/jpeg',
+                        aspectRatio: '16:9',
+                    },
+                });
+    
+                return imageResponse.generatedImages?.[0]?.image?.imageBytes || null;
+            } catch (imageError) {
+                console.error('Error generating illustration:', imageError);
+                return null; // Non-fatal error: If image generation fails, proceed without it.
             }
-        } catch (imageError) {
-            console.error('Error generating illustration:', imageError);
-            // Non-fatal error: If image generation fails, proceed without it.
-            imageBase64 = null;
+        })();
+
+        // Await both promises to complete
+        const [audioBase64, imageBase64] = await Promise.all([ttsPromise, imagePromise]);
+
+        // Audio is essential, so fail the request if it couldn't be generated.
+        if (!audioBase64) {
+            return res.status(500).json({ error: 'Failed to generate audio narration.' });
         }
         
         // Step 4: Send all assets back to the client
         res.json({
             storyMarkdown,
             audioBase64,
-            imageBase64,
+            imageBase64, // This will be null if image generation failed, which is handled by the frontend
         });
 
     } catch (error) {
