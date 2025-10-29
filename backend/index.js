@@ -10,9 +10,12 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 const getAIClient = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // The API key for the backend is expected to be in the `API_KEY` environment variable.
+    // This aligns with the naming conventions typically used in the deployment environment.
+    const apiKey = process.env.API_KEY;
     if (!apiKey) {
-        throw new Error("GEMINI_API_KEY environment variable not set.");
+        // This error will be thrown if the API_KEY is not configured in the Cloud Run service.
+        throw new Error("API_KEY environment variable not set on the backend service.");
     }
     return new GoogleGenAI({ apiKey });
 };
