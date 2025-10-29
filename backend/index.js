@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenAI, Modality } = require('@google/genai');
+const { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } = require('@google/genai');
 
 const app = express();
 
@@ -8,6 +8,28 @@ const app = express();
 // to your frontend's domain.
 app.use(cors()); 
 app.use(express.json({ limit: '10mb' }));
+
+// A helper function to provide more specific error messages
+function handleGoogleAIError(error, res, context) {
+    console.error(`Error during ${context}:`, JSON.stringify(error, null, 2));
+
+    let userMessage = `A critical error occurred on the server during ${context}.`;
+    let statusCode = 500;
+
+    // Check for common Google Cloud permission/API errors
+    if (error.message && (error.message.includes('permission denied') || error.message.includes('API is not enabled'))) {
+        userMessage = 'The AI service permission is denied. Please ensure the Vertex AI API is enabled and the service account has the "Vertex AI User" role.';
+        statusCode = 403; // Forbidden
+    } else if (error.message && error.message.includes('API_KEY_INVALID')) {
+        userMessage = 'The API key provided is invalid. Please check the configuration.';
+        statusCode = 401; // Unauthorized
+    } else if (error.message && error.message.includes('billing account')) {
+        userMessage = 'The project is not linked to a billing account, which is required for the AI service. Please enable billing in the Google Cloud Console.';
+        statusCode = 402; // Payment Required
+    }
+
+    return res.status(statusCode).json({ error: userMessage });
+}
 
 // Endpoint to generate both the story and the audio
 app.post('/generate-story', async (req, res) => {
@@ -25,6 +47,18 @@ app.post('/generate-story', async (req, res) => {
         }
 
         const ai = new GoogleGenAI({ apiKey });
+        
+        // Add safety settings to be less restrictive for educational content
+        const safetySettings = [
+            {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            },
+            {
+                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+            },
+        ];
 
         // Step 1: Generate the story content
         const storyPrompt = `
@@ -53,13 +87,13 @@ Generate the story now.
         const storyResponse = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: storyPrompt,
+            config: { safetySettings },
         });
 
         if (!storyResponse.candidates || storyResponse.candidates.length === 0) {
-            console.error("Story generation was blocked or returned no candidates.", JSON.stringify(storyResponse, null, 2));
             const blockReason = storyResponse.promptFeedback?.blockReason;
             const errorMessage = blockReason
-                ? `Story generation was blocked due to: ${blockReason}. Please try a different topic.`
+                ? `Story generation was blocked for safety reasons: ${blockReason}. Please try a different topic.`
                 : 'The AI failed to generate story content. It might be a temporary issue.';
             return res.status(500).json({ error: errorMessage });
         }
@@ -67,146 +101,88 @@ Generate the story now.
         
         // --- Steps 2 & 3 in Parallel ---
 
-        // Promise for TTS audio generation
         const ttsPromise = (async () => {
-            try {
-                const ttsPrompt = `Read the following story in a ${emotion} tone.`;
-                const fullTextForTTS = `${ttsPrompt}\n\n${storyMarkdown.replace(/^#\s/gm, '')}`;
-        
-                const audioResponse = await ai.models.generateContent({
-                    model: "gemini-2.5-flash-preview-tts",
-                    contents: [{ parts: [{ text: fullTextForTTS }] }],
-                    config: {
-                        responseModalities: [Modality.AUDIO],
-                        speechConfig: {
-                            voiceConfig: {
-                                prebuiltVoiceConfig: { voiceName: voice },
-                            },
-                        },
-                    },
-                });
-
-                if (!audioResponse.candidates || audioResponse.candidates.length === 0) {
-                    console.error("TTS generation was blocked or returned no candidates.", JSON.stringify(audioResponse, null, 2));
-                    return null;
-                }
-                const audioPart = audioResponse.candidates[0].content?.parts?.find(p => p.inlineData);
-                return audioPart?.inlineData?.data || null;
-
-            } catch (error) {
-                console.error('Error generating TTS audio:', error);
-                return null; // Return null on failure
+            const ttsPrompt = `Read the following story in a ${emotion} tone.`;
+            const fullTextForTTS = `${ttsPrompt}\n\n${storyMarkdown.replace(/^#\s/gm, '')}`;
+            const audioResponse = await ai.models.generateContent({
+                model: "gemini-2.5-flash-preview-tts",
+                contents: [{ parts: [{ text: fullTextForTTS }] }],
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+                },
+            });
+            if (!audioResponse.candidates || audioResponse.candidates.length === 0) {
+                console.warn("TTS generation was blocked or returned no candidates.", JSON.stringify(audioResponse, null, 2));
+                return null;
             }
+            return audioResponse.candidates[0].content?.parts?.find(p => p.inlineData)?.inlineData?.data || null;
         })();
 
-        // Promise for illustration generation
         const imagePromise = (async () => {
-            try {
-                const titleMatch = storyMarkdown.match(/# Title: (.*)/);
-                const introductionMatch = storyMarkdown.match(/# Introduction:([\s\S]*?)# Emotional Trigger:/);
-                const title = titleMatch ? titleMatch[1] : topic;
-                const introduction = introductionMatch ? introductionMatch[1].trim() : '';
-    
-                const imagePrompt = `
-Generate a vibrant, child-friendly, storybook illustration.
-Style: Whimsical, colorful, digital painting, soft lighting, suitable for a children's educational story.
-Scene: ${title}. ${introduction}
-Do not include any text or words in the image.
-`;
-    
-                const imageResponse = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash-image',
-                    contents: {
-                        parts: [{ text: imagePrompt }],
-                    },
-                    config: {
-                        responseModalities: [Modality.IMAGE],
-                    },
-                });
-    
-                if (!imageResponse.candidates || imageResponse.candidates.length === 0) {
-                    console.warn("Image generation was blocked or returned no candidates.", JSON.stringify(imageResponse, null, 2));
-                    return null;
-                }
-                const imagePart = imageResponse.candidates[0].content?.parts?.find(p => p.inlineData);
-                return imagePart?.inlineData?.data || null;
-
-            } catch (imageError) {
-                console.error('Error generating illustration:', imageError);
-                return null; // Non-fatal error: If image generation fails, proceed without it.
+            const titleMatch = storyMarkdown.match(/# Title: (.*)/);
+            const introductionMatch = storyMarkdown.match(/# Introduction:([\s\S]*?)# Emotional Trigger:/);
+            const title = titleMatch ? titleMatch[1] : topic;
+            const introduction = introductionMatch ? introductionMatch[1].trim() : '';
+            const imagePrompt = `Generate a vibrant, child-friendly, storybook illustration. Style: Whimsical, colorful, digital painting, soft lighting. Scene: ${title}. ${introduction}. Do not include any text or words.`;
+            
+            const imageResponse = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: { parts: [{ text: imagePrompt }] },
+                config: { responseModalities: [Modality.IMAGE], safetySettings },
+            });
+            if (!imageResponse.candidates || imageResponse.candidates.length === 0) {
+                console.warn("Image generation was blocked or returned no candidates.", JSON.stringify(imageResponse, null, 2));
+                return null;
             }
+            return imageResponse.candidates[0].content?.parts?.find(p => p.inlineData)?.inlineData?.data || null;
         })();
 
-        // Await both promises to complete
         const [audioBase64, imageBase64] = await Promise.all([ttsPromise, imagePromise]);
 
-        // Audio is essential, so fail the request if it couldn't be generated.
         if (!audioBase64) {
-            return res.status(500).json({ error: 'Failed to generate audio narration. The AI may have had an issue with the voice model.' });
+            return res.status(500).json({ error: 'Failed to generate audio narration. The AI may have had an issue with the voice model or the story content.' });
         }
         
-        // Step 4: Send all assets back to the client
-        res.json({
-            storyMarkdown,
-            audioBase64,
-            imageBase64, // This will be null if image generation failed, which is handled by the frontend
-        });
+        res.json({ storyMarkdown, audioBase64, imageBase64 });
 
     } catch (error) {
-        console.error('Critical error in /generate-story:', error);
-        res.status(500).json({ error: 'A critical error occurred on the server while communicating with the AI. Please check the server logs for details.' });
+        return handleGoogleAIError(error, res, 'story generation');
     }
 });
 
-// Endpoint to transcribe audio
 app.post('/transcribe-audio', async (req, res) => {
     try {
         const apiKey = process.env.API_KEY;
         if (!apiKey) {
-            console.error("API_KEY environment variable is not set.");
-            return res.status(500).json({ error: 'The AI service has not been configured by the server administrator. Missing API Key.' });
+            return res.status(500).json({ error: 'The AI service has not been configured. Missing API Key.' });
         }
 
-        const { audioData, mimeType } = req.body; // audioData is a base64 string
-
+        const { audioData, mimeType } = req.body;
         if (!audioData || !mimeType) {
             return res.status(400).json({ error: 'Missing audioData or mimeType.' });
         }
 
         const ai = new GoogleGenAI({ apiKey });
-        
-        const audioPart = {
-            inlineData: {
-                data: audioData,
-                mimeType: mimeType,
-            },
-        };
-        const textPart = {
-            text: "Transcribe this audio.",
-        };
-
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: { parts: [audioPart, textPart] },
+            contents: { parts: [
+                { inlineData: { data: audioData, mimeType: mimeType } },
+                { text: "Transcribe this audio." }
+            ] },
         });
 
         if (!response.candidates || response.candidates.length === 0) {
-            console.error("Transcription was blocked or returned no candidates.", JSON.stringify(response, null, 2));
             return res.status(500).json({ error: 'The AI could not process the audio.' });
         }
-
-        const transcription = response.text;
         
-        res.json({ transcription });
+        res.json({ transcription: response.text });
 
     } catch (error) {
-        console.error('Error in /transcribe-audio:', error);
-        res.status(500).json({ error: 'A critical error occurred on the server during transcription.' });
+        return handleGoogleAIError(error, res, 'audio transcription');
     }
 });
 
-// This is the required entry point for Google Cloud Run
-// It starts a server and listens for requests on the port specified by the environment.
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
