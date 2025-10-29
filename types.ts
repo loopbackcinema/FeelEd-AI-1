@@ -47,15 +47,6 @@ export class APIError extends AppError {
 }
 
 /**
- * Thrown when the user's API key is invalid or missing.
- */
-export class InvalidApiKeyError extends AppError {
-  constructor(message = "Your selected API key is invalid or could not be found. Please select a new, valid key to continue.") {
-    super(message);
-  }
-}
-
-/**
  * Thrown when the AI fails to generate a complete story.
  */
 export class StoryGenerationError extends AppError {

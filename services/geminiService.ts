@@ -1,23 +1,12 @@
-
-// Fix: Removed unused and non-existent type 'LiveSession'.
-import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { Story } from '../types';
-import { AppError, APIError, NetworkError, StoryGenerationError, TTSError, InvalidApiKeyError } from '../types';
+import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
 
-const storyGenerationModel = 'gemini-2.5-pro';
-const ttsModel = 'gemini-2.5-flash-preview-tts';
-const transcriptionModel = 'gemini-2.5-flash-native-audio-preview-09-2025';
-
-// --- Helper function to get the AI client ---
-const getAIClient = () => {
-  // The API key is sourced from process.env.API_KEY, which is automatically
-  // managed by the execution environment. The explicit check has been removed
-  // to align with the platform's key management strategy.
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
-};
+// This is a placeholder for your BFF's base URL.
+// In a real deployment, this would be the URL of your Google Cloud Function or other backend service.
+const BFF_BASE_URL = 'https://us-central1-your-project-id.cloudfunctions.net/api';
 
 
-// --- Helper functions for WAV conversion ---
+// --- Helper functions for WAV conversion (remain on frontend) ---
 
 /**
  * Decodes a base64 string into a Uint8Array.
@@ -82,9 +71,6 @@ function pcmToWav(pcmData: Uint8Array): Blob {
 
 function parseStoryFromMarkdown(markdown: string): Partial<Story> {
   const story: Partial<Story> = {};
-
-  // Map of heading variations (lowercase) to the story object key.
-  // This makes parsing flexible regarding casing or minor variations.
   const headingMap: Record<string, keyof Story> = {
     'title': 'title',
     'introduction': 'introduction',
@@ -93,24 +79,15 @@ function parseStoryFromMarkdown(markdown: string): Partial<Story> {
     'resolution': 'resolution',
     'moral message': 'moral_message',
   };
-
-  // Split the markdown by H1 headings. The 'm' flag is crucial for multiline matching.
-  // This approach is more robust than regex matching for each section individually.
-  // It handles extraneous text before the first heading and variations in whitespace.
   const sections = markdown.trim().split(/^\s*#\s+/m);
 
   for (const section of sections) {
-    // Skip any empty sections resulting from the split (e.g., leading empty string).
     if (!section.trim()) continue;
-
-    // Find the first newline to separate the heading from the content.
     const firstNewlineIndex = section.indexOf('\n');
-    
     let heading: string;
     let content: string;
 
     if (firstNewlineIndex === -1) {
-      // This case handles a heading with no content below it, or a single line of text.
       heading = section.trim();
       content = '';
     } else {
@@ -118,17 +95,13 @@ function parseStoryFromMarkdown(markdown: string): Partial<Story> {
       content = section.substring(firstNewlineIndex + 1).trim();
     }
 
-    // Normalize the heading to match our map keys.
     const normalizedHeading = heading.toLowerCase().replace(/:$/, '').trim();
-    
-    // Find the corresponding story key.
     const storyKey = headingMap[normalizedHeading];
     
     if (storyKey) {
       story[storyKey] = content;
     }
   }
-
   return story;
 }
 
@@ -138,7 +111,6 @@ export async function generateStoryAndAudio(
   language: string,
   emotion: string,
   userRole: string,
-  onStoryUpdate: (story: Partial<Story>) => void,
   voice: string
 ): Promise<{ story: Story; audioUrl: string }> {
   if (!navigator.onLine) {
@@ -146,153 +118,94 @@ export async function generateStoryAndAudio(
   }
 
   try {
-    const ai = getAIClient(); // Lazily initialize the AI client
-    
-    // 1. Generate Story via streaming
-    const systemInstruction = `You are an expert educational storyteller. Your task is to convert a given academic topic into a short, emotionally engaging story.
-    The story must follow a 5-part structure.
-    Make it suitable for the given grade level and emotion tone, in the specified language.
-    Tailor the story for the user, who is a ${userRole}. For a teacher, you might include teaching cues or questions. For a parent, you might suggest conversational prompts. For a student, keep it direct and engaging.
-    Output the story in markdown format, with each part under a specific heading: "# Title", "# Introduction", "# Emotional Trigger", "# Concept Explanation", "# Resolution", "# Moral Message".
-    Do not include any other text, commentary, or markdown formatting like bolding or italics.`;
-    
-    const storyPrompt = `Topic: ${topic}\nGrade: ${grade}\nLanguage: ${language}\nEmotion Tone: ${emotion}\nUser Role: ${userRole}`;
-    
-    const storyStream = await ai.models.generateContentStream({
-      model: storyGenerationModel,
-      contents: storyPrompt,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-      },
+    // 1. Call your own BFF, not Google's API
+    const response = await fetch(`${BFF_BASE_URL}/generate-story`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, grade, language, emotion, userRole, voice }),
     });
 
-    let fullStoryText = '';
-    for await (const chunk of storyStream) {
-        fullStoryText += chunk.text;
-        const partialStory = parseStoryFromMarkdown(fullStoryText);
-        partialStory.emotion_tone = emotion;
-        onStoryUpdate(partialStory);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'The AI service failed with an unknown error.' }));
+      // Distinguish between different kinds of BFF errors if the BFF provides them
+      if (response.status === 429) { // Example: rate limit
+          throw new APIError("You are making requests too quickly. Please wait a moment.");
+      }
+      throw new APIError(errorData.error || `The AI service failed with status: ${response.status}.`);
     }
-    
-    const story: Story = parseStoryFromMarkdown(fullStoryText) as Story;
+
+    const { storyMarkdown, audioBase64 } = await response.json();
+
+    if (!storyMarkdown) {
+        throw new StoryGenerationError("The AI didn't generate a story. Please try adjusting your topic.");
+    }
+    if (!audioBase64) {
+        throw new TTSError("The story was created, but audio narration failed. Please try again.");
+    }
+
+    const story: Story = parseStoryFromMarkdown(storyMarkdown) as Story;
     story.emotion_tone = emotion;
     
     if (Object.keys(story).length < 6) { // title + 5 parts
       throw new StoryGenerationError("The AI didn't generate a complete story structure. Please try again or adjust your topic.");
     }
 
-
-    // 2. Generate Audio (TTS)
-    const storyTextForTts = [
-      story.title,
-      story.introduction,
-      story.emotional_trigger,
-      story.concept_explanation,
-      story.resolution,
-      story.moral_message,
-    ].join('\n\n');
-
-    const ttsResponse = await ai.models.generateContent({
-        model: ttsModel,
-        contents: [{ parts: [{ text: storyTextForTts }] }],
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-                voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: voice },
-                },
-            },
-        },
-    });
-
-    const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-
-    if (!base64Audio) {
-      // Enhanced error handling to provide more specific feedback on TTS failure.
-      const candidate = ttsResponse.candidates?.[0];
-      const blockReason = ttsResponse.promptFeedback?.blockReason;
-      let details = '';
-
-      if (blockReason) {
-        details = `The request was blocked (Reason: ${blockReason}).`;
-      } else if (candidate?.finishReason) {
-        details = `Generation failed (Reason: ${candidate.finishReason}).`;
-        if (candidate.finishMessage) {
-          details += ` Details: ${candidate.finishMessage}`;
-        }
-      }
-      
-      const errorMessage = `The AI failed to generate audio narration for the story. ${details}`.trim();
-      throw new TTSError(errorMessage);
-    }
-    
-    const pcmData = decode(base64Audio);
+    const pcmData = decode(audioBase64);
     const wavBlob = pcmToWav(pcmData);
     const audioUrl = URL.createObjectURL(wavBlob);
 
-
     return { story, audioUrl };
   } catch (error: any) {
-    console.error("Error in generateStoryAndAudio:", error);
-    
-    if (error.message && (
-        error.message.includes("API key not valid") || 
-        error.message.includes("API Key must be set") ||
-        error.message.includes("Requested entity was not found")
-    )) {
-        throw new InvalidApiKeyError();
-    }
-
+    console.error("Error communicating with BFF for story generation:", error);
     if (error instanceof AppError) {
       throw error;
     }
-    throw new APIError(`An unexpected issue occurred with the AI service. Details: ${error.message}`);
+    // Catches network errors from fetch itself
+    throw new APIError(`An unexpected issue occurred. Please check your connection and try again. Details: ${error.message}`);
   }
 }
 
-export function createTranscriptionSession(
-    callbacks: {
-        onMessage: (text: string) => void;
-        onError: (error: Error) => void;
-        onClose: () => void;
+/**
+ * Sends an audio blob to the BFF for transcription.
+ */
+export async function transcribeAudio(audioBlob: Blob): Promise<string> {
+    if (!navigator.onLine) {
+        throw new NetworkError();
     }
-// Fix: Removed 'Promise<LiveSession>' return type to allow for type inference,
-// as 'LiveSession' is not an exported member of the SDK.
-) {
+
     try {
-        const ai = getAIClient(); // Lazily initialize the AI client
-        return ai.live.connect({
-            model: transcriptionModel,
-            callbacks: {
-                onopen: () => console.log('Transcription session opened.'),
-                onmessage: (message) => {
-                    if (message.serverContent?.inputTranscription) {
-                        callbacks.onMessage(message.serverContent.inputTranscription.text);
-                    }
-                },
-                onerror: (e: ErrorEvent) => {
-                    console.error('Transcription error:', e);
-                    callbacks.onError(new Error(e.message));
-                },
-                onclose: (e: CloseEvent) => {
-                    console.log('Transcription session closed.');
-                    callbacks.onClose();
-                },
-            },
-            config: {
-                inputAudioTranscription: {},
-            },
+        const reader = new FileReader();
+        const readPromise = new Promise<string>((resolve, reject) => {
+            reader.onloadend = () => {
+                // result is "data:audio/webm;base64,...."
+                // We only want the base64 part
+                const base64data = (reader.result as string).split(',')[1];
+                resolve(base64data);
+            };
+            reader.onerror = reject;
         });
-    } catch(error) {
-        console.error("Failed to create transcription session:", error);
-        // Immediately call the onError callback if client creation fails
-        if(error instanceof Error) {
-            callbacks.onError(error);
-        } else {
-            callbacks.onError(new Error("An unknown error occurred while setting up transcription."));
+        reader.readAsDataURL(audioBlob);
+        const base64Audio = await readPromise;
+
+        const response = await fetch(`${BFF_BASE_URL}/transcribe-audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioData: base64Audio, mimeType: audioBlob.type }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Transcription service failed.' }));
+            throw new APIError(errorData.error || `Transcription failed with status: ${response.status}`);
         }
-        // Return a dummy promise that rejects to fulfill the type signature
-        return Promise.reject(error);
+
+        const { transcription } = await response.json();
+        return transcription;
+
+    } catch (error: any) {
+        console.error("Error communicating with BFF for transcription:", error);
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new APIError(`Transcription failed. Details: ${error.message}`);
     }
 }

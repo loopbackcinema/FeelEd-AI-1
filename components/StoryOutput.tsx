@@ -6,7 +6,6 @@ interface StoryOutputProps {
   story: Partial<Story>;
   audioUrl: string | null;
   onReset: () => void;
-  isStreaming?: boolean;
 }
 
 const StorySection: React.FC<{ title: string; content?: string }> = ({ title, content }) => (
@@ -25,11 +24,11 @@ const StorySection: React.FC<{ title: string; content?: string }> = ({ title, co
 );
 
 
-export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onReset, isStreaming = false }) => {
+export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onReset }) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleShare = async () => {
-    if (!story || isStreaming || !audioUrl) return;
+    if (!story || !audioUrl) return;
 
     const plainText = [
         `Title: ${story.title || 'Untitled Story'}`,
@@ -93,7 +92,7 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onRes
              <div className="flex-shrink-0">
                 <button
                     onClick={handleShare}
-                    disabled={isStreaming || !audioUrl}
+                    disabled={!audioUrl}
                     aria-label="Share Story"
                     className={`min-w-[95px] h-11 flex items-center justify-center px-4 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${
                         isCopied
@@ -125,10 +124,9 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onRes
       <div className="pt-4 text-center">
         <button
           onClick={onReset}
-          disabled={isStreaming}
-          className="px-8 py-3 text-lg font-semibold text-indigo-600 bg-white border-2 border-indigo-600 rounded-xl hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-8 py-3 text-lg font-semibold text-indigo-600 bg-white border-2 border-indigo-600 rounded-xl hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105"
         >
-          {isStreaming ? 'Generating...' : 'Create Another Story'}
+          Create Another Story
         </button>
       </div>
     </div>

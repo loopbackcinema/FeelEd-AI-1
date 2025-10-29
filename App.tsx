@@ -6,11 +6,9 @@ import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoginModal } from './components/LoginModal';
-import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
-import { ApiKeyModal } from './components/ApiKeyModal';
 import { generateStoryAndAudio } from './services/geminiService';
 import type { Story, User } from './types';
-import { AppError, APIError, NetworkError, StoryGenerationError, TTSError, InvalidApiKeyError } from './types';
+import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
 import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, TTS_VOICES } from './constants';
 
 interface GoogleJwtPayload {
@@ -19,15 +17,10 @@ interface GoogleJwtPayload {
   picture: string;
 }
 
-// Fix: Resolved TypeScript global type conflict by defining and using a consistent 'AIStudio' interface.
+// The window.aistudio and API key logic are no longer needed.
 declare global {
-    interface AIStudio {
-        hasSelectedApiKey: () => Promise<boolean>;
-        openSelectKey: () => Promise<void>;
-    }
     interface Window {
         google: any;
-        aistudio?: AIStudio;
     }
 }
 
@@ -40,7 +33,6 @@ const App: React.FC = () => {
   const [voice, setVoice] = useState<string>(TTS_VOICES[0].id); // Default to first voice
 
   const [story, setStory] = useState<Story | null>(null);
-  const [streamingStory, setStreamingStory] = useState<Partial<Story> | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
@@ -51,13 +43,7 @@ const App: React.FC = () => {
     () => Number(localStorage.getItem('guestStoryCount') || 0)
   );
   
-  // The API key state now leverages sessionStorage for persistence within a session.
-  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
-  const [isCheckingApiKey, setIsCheckingApiKey] = useState<boolean>(true);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [envError, setEnvError] = useState<string | null>(null);
   const wasLoginTriggeredBySubmit = useRef<boolean>(false);
-
 
   useEffect(() => {
     // Check for persisted user session
@@ -65,81 +51,12 @@ const App: React.FC = () => {
       const storedUser = localStorage.getItem('feelEdUser');
       if (storedUser) {
         setUser(JSON.parse(storedUser));
-      } else {
-        // If there's no user, we don't need to check for a key.
-        setIsCheckingApiKey(false);
       }
     } catch (e) {
       console.error("Failed to parse user session, clearing storage.", e);
       localStorage.removeItem('feelEdUser');
-      setIsCheckingApiKey(false);
     }
   }, []);
-
-  const checkApiKey = useCallback(async () => {
-      // Trust sessionStorage first to avoid unnecessary checks and race conditions.
-      if (sessionStorage.getItem('apiKeySelected') === 'true') {
-          setHasApiKey(true);
-          setIsCheckingApiKey(false);
-          return;
-      }
-
-      if (!window.aistudio) {
-          console.warn("`window.aistudio` not available for API key check.");
-          setHasApiKey(false);
-          setIsCheckingApiKey(false);
-          return;
-      }
-      try {
-          const keySelected = await window.aistudio.hasSelectedApiKey();
-          if (keySelected) {
-              sessionStorage.setItem('apiKeySelected', 'true');
-          }
-          setHasApiKey(keySelected);
-      } catch (e) {
-          console.error("Error checking API key status:", e);
-          setHasApiKey(false);
-      } finally {
-          setIsCheckingApiKey(false);
-      }
-  }, []);
-
-  useEffect(() => {
-    // This effect verifies the API key status, with a timeout to prevent an infinite loading loop.
-    if (user) {
-        setIsCheckingApiKey(true);
-        setEnvError(null);
-        let intervalId: number | undefined;
-        let timeoutId: number | undefined;
-
-        const cleanup = () => {
-            if (intervalId) clearInterval(intervalId);
-            if (timeoutId) clearTimeout(timeoutId);
-        };
-
-        if (window.aistudio) {
-            checkApiKey();
-        } else {
-            intervalId = window.setInterval(() => {
-                if (window.aistudio) {
-                    cleanup();
-                    checkApiKey();
-                }
-            }, 100);
-
-            timeoutId = window.setTimeout(() => {
-                cleanup();
-                console.error("window.aistudio failed to initialize within 5 seconds.");
-                setEnvError("Could not connect to the AI Studio environment. Please try refreshing the page.");
-                setHasApiKey(false);
-                setIsCheckingApiKey(false);
-            }, 5000); // 5-second timeout
-        }
-
-        return cleanup;
-    }
-  }, [user, checkApiKey]);
-
 
   if (error) {
     // This will be caught by the nearest Error Boundary
@@ -147,9 +64,6 @@ const App: React.FC = () => {
   }
 
   const startStoryGeneration = useCallback(async () => {
-    setApiKeyError(null);
-    setEnvError(null);
-
     if (!topic.trim() || !grade || !language || !emotion || !userRole) {
         const formError = new Error("Please fill out all fields before generating a story.");
         formError.name = "Incomplete Form";
@@ -160,14 +74,10 @@ const App: React.FC = () => {
     setIsLoading(true);
     setStory(null);
     setAudioUrl(null);
-    setStreamingStory({});
 
     try {
-      const handleStoryUpdate = (partialStory: Partial<Story>) => {
-        setStreamingStory(prev => ({ ...prev, ...partialStory }));
-      };
-
-      const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, handleStoryUpdate, voice);
+      // The streaming callback is no longer needed with the BFF architecture.
+      const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, voice);
       setStory(result.story);
       setAudioUrl(result.audioUrl);
       
@@ -180,44 +90,34 @@ const App: React.FC = () => {
     } catch (err: any) {
         console.error(err);
 
-        if (err instanceof InvalidApiKeyError) {
-            sessionStorage.removeItem('apiKeySelected'); // Clear session state on invalid key
-            setHasApiKey(false); // Force the user to re-select a key.
-            setApiKeyError(err.message);
-        } else {
-            let title = "An Unexpected Error Occurred";
-            let message = "Something went wrong. Please try again. If the problem persists, contact support.";
+        let title = "An Unexpected Error Occurred";
+        let message = "Something went wrong. Please try again. If the problem persists, contact support.";
 
-            if (err instanceof AppError) {
-                message = err.message;
-                if (err instanceof NetworkError) title = "Network Connection Error";
-                else if (err instanceof APIError) title = "AI Service Error";
-                else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
-                else if (err instanceof TTSError) title = "Audio Narration Failed";
-            } else if (err.message) {
-                message = err.message;
-            }
-
-            const appError = new Error(message);
-            appError.name = title;
-            setError(appError);
+        if (err instanceof AppError) {
+            message = err.message;
+            if (err instanceof NetworkError) title = "Network Connection Error";
+            else if (err instanceof APIError) title = "AI Service Error";
+            else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
+            else if (err instanceof TTSError) title = "Audio Narration Failed";
+        } else if (err.message) {
+            message = err.message;
         }
+
+        const appError = new Error(message);
+        appError.name = title;
+        setError(appError);
         
     } finally {
       setIsLoading(false);
-      setStreamingStory(null);
     }
   }, [topic, grade, language, emotion, userRole, voice, user, guestStoryCount]);
   
   useEffect(() => {
     if (user && wasLoginTriggeredBySubmit.current) {
         wasLoginTriggeredBySubmit.current = false;
-        // Ensure key is checked before auto-starting generation
-        if (hasApiKey || userRole === 'Student') {
-            startStoryGeneration();
-        }
+        startStoryGeneration();
     }
-  }, [user, startStoryGeneration, hasApiKey, userRole]);
+  }, [user, startStoryGeneration]);
 
   const handleLoginSuccess = (credential: string) => {
     try {
@@ -245,41 +145,8 @@ const App: React.FC = () => {
     }
     localStorage.removeItem('feelEdUser');
     localStorage.removeItem('guestStoryCount');
-    sessionStorage.removeItem('apiKeySelected'); // Clear API key session state
     setUser(null);
     setGuestStoryCount(0);
-    setHasApiKey(false);
-  };
-
-  const handleSelectKey = async () => {
-    if (window.aistudio) {
-      setApiKeyError(null);
-      setEnvError(null);
-      try {
-        // This promise resolves when the user closes the selection dialog.
-        await window.aistudio.openSelectKey();
-        
-        // This is a critical step to avoid a race condition. `window.aistudio.hasSelectedApiKey()`
-        // may not return `true` immediately after the user selects a key. We optimistically
-        // set our state to `true`. If no key was selected, the next API call will fail,
-        // and our error handling will reset the state correctly.
-        setHasApiKey(true);
-        sessionStorage.setItem('apiKeySelected', 'true');
-
-        // If a topic was already entered, we can proceed to generate the story.
-        // We call `startStoryGeneration` directly for a more immediate response.
-        if (topic.trim() && !isLoading) {
-          startStoryGeneration();
-        }
-      } catch (e) {
-        console.error("Error with select key dialog:", e);
-        setHasApiKey(false); // Ensure we reflect the failed state
-        sessionStorage.removeItem('apiKeySelected'); // Also clear session storage on failure
-        const keyError = new Error("Could not open the API key selection dialog. Please try again.");
-        keyError.name = "UI Error";
-        setError(keyError);
-      }
-    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -291,34 +158,17 @@ const App: React.FC = () => {
       return;
     }
     
-    // This check is a safeguard. The modal should prevent this from being clickable.
-    if (user && userRole !== 'Student' && !hasApiKey) {
-      return;
-    }
-
     startStoryGeneration();
   };
 
   const handleReset = () => {
     setStory(null);
-    setStreamingStory(null);
     setAudioUrl(null);
     setTopic('');
   };
 
   const renderContent = () => {
-    if (isCheckingApiKey && user) {
-      return <Loader />;
-    }
-
-    if (user && !hasApiKey && userRole === 'Student') {
-      return <StudentApiKeyMessage />;
-    }
-
     if (isLoading) {
-      if (streamingStory && Object.keys(streamingStory).length > 0) {
-        return <StoryOutput story={streamingStory} audioUrl={null} onReset={handleReset} isStreaming={true} />;
-      }
       return <Loader />;
     }
 
@@ -326,8 +176,6 @@ const App: React.FC = () => {
       return <StoryOutput story={story} audioUrl={audioUrl} onReset={handleReset} />;
     }
 
-    // The form is now only disabled when a story is actively being generated.
-    // The ApiKeyModal will overlay the UI, preventing interaction until a key is selected.
     return (
       <StoryInputForm
         topic={topic}
@@ -362,14 +210,6 @@ const App: React.FC = () => {
         <LoginModal 
             onLoginSuccess={handleLoginSuccess}
             onDismiss={() => setShowLoginModal(false)}
-        />
-      )}
-
-      {user && !hasApiKey && userRole !== 'Student' && !isCheckingApiKey && (
-        <ApiKeyModal 
-            handleSelectKey={handleSelectKey} 
-            apiKeyError={apiKeyError}
-            envError={envError}
         />
       )}
     </div>

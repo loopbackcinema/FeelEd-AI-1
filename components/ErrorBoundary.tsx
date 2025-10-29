@@ -10,10 +10,16 @@ interface State {
 }
 
 class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+  // Fix: Switched from a class property for state to a constructor.
+  // This ensures `super(props)` is called, which can resolve type inference issues
+  // where `this.props` is not recognized on the component instance.
+  constructor(props: Props) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+    };
+  }
 
   public static getDerivedStateFromError(error: Error): State {
     // Update state so the next render will show the fallback UI.
@@ -30,10 +36,10 @@ class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
-  public render() {
+  public render(): ReactNode {
     if (this.state.hasError) {
       // Use the error's name and message to provide more context
-      const title = this.state.error?.name !== 'Error' ? this.state.error.name : "An Unexpected Error Occurred";
+      const title = this.state.error && this.state.error.name !== 'Error' ? this.state.error.name : "An Unexpected Error Occurred";
       const message = this.state.error?.message || "An unknown issue occurred. Please try refreshing the page.";
 
       return (
@@ -56,7 +62,7 @@ class ErrorBoundary extends Component<Props, State> {
         </div>
       );
     }
-
+    
     return this.props.children;
   }
 }
