@@ -5,28 +5,26 @@ const { GoogleGenAI, Modality } = require('@google/genai');
 const app = express();
 
 // IMPORTANT: In a real production environment, you would restrict this
-// to your frontend's domain. For now, this is open.
+// to your frontend's domain.
 app.use(cors()); 
 app.use(express.json({ limit: '10mb' }));
-
-const getAIClient = () => {
-    // This initializes the client using Application Default Credentials (ADC).
-    // It automatically uses the service account attached to this Cloud Run service.
-    // This is the recommended authentication method for Google Cloud environments.
-    // Ensure the service account has the "Vertex AI User" role granted in IAM.
-    return new GoogleGenAI();
-};
 
 // Endpoint to generate both the story and the audio
 app.post('/generate-story', async (req, res) => {
     try {
+        const apiKey = process.env.API_KEY;
+        if (!apiKey) {
+            console.error("API_KEY environment variable is not set.");
+            return res.status(500).json({ error: 'The AI service has not been configured by the server administrator. Missing API Key.' });
+        }
+
         const { topic, grade, language, emotion, userRole, voice } = req.body;
 
         if (!topic || !grade || !language || !emotion || !userRole || !voice) {
             return res.status(400).json({ error: 'Missing required fields in the request.' });
         }
 
-        const ai = getAIClient();
+        const ai = new GoogleGenAI({ apiKey });
 
         // Step 1: Generate the story content
         const storyPrompt = `
@@ -152,13 +150,19 @@ Do not include any text or words in the image.
 // Endpoint to transcribe audio
 app.post('/transcribe-audio', async (req, res) => {
     try {
+        const apiKey = process.env.API_KEY;
+        if (!apiKey) {
+            console.error("API_KEY environment variable is not set.");
+            return res.status(500).json({ error: 'The AI service has not been configured by the server administrator. Missing API Key.' });
+        }
+
         const { audioData, mimeType } = req.body; // audioData is a base64 string
 
         if (!audioData || !mimeType) {
             return res.status(400).json({ error: 'Missing audioData or mimeType.' });
         }
 
-        const ai = getAIClient();
+        const ai = new GoogleGenAI({ apiKey });
         
         const audioPart = {
             inlineData: {
