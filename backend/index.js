@@ -108,17 +108,23 @@ Scene: ${title}. ${introduction}
 Do not include any text or words in the image.
 `;
     
-                const imageResponse = await ai.models.generateImages({
-                    model: 'imagen-4.0-generate-001',
-                    prompt: imagePrompt,
+                const imageResponse = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash-image',
+                    contents: {
+                        parts: [{ text: imagePrompt }],
+                    },
                     config: {
-                        numberOfImages: 1,
-                        outputMimeType: 'image/jpeg',
-                        aspectRatio: '16:9',
+                        responseModalities: [Modality.IMAGE],
                     },
                 });
     
-                return imageResponse.generatedImages?.[0]?.image?.imageBytes || null;
+                // Extract image data from the response
+                for (const part of imageResponse.candidates[0].content.parts) {
+                    if (part.inlineData) {
+                        return part.inlineData.data; // This is the base64 string
+                    }
+                }
+                return null; // No image found
             } catch (imageError) {
                 console.error('Error generating illustration:', imageError);
                 return null; // Non-fatal error: If image generation fails, proceed without it.
