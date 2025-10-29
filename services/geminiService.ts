@@ -2,10 +2,8 @@
 import type { Story } from '../types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
 
-// This is a placeholder for your BFF's base URL.
-// In a real deployment, this would be the URL of your Google Cloud Function or other backend service.
-const BFF_BASE_URL = 'https://feeled-ai-emotional-story-based-learning-208105784717.us-west1.run.app';
-
+// The BFF_BASE_URL is no longer needed as we are using Vercel Serverless Functions
+// which are on the same origin.
 
 // --- Helper functions for WAV conversion (remain on frontend) ---
 
@@ -129,8 +127,8 @@ export async function generateStoryAndAudio(
   const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
 
   try {
-    // 1. Call your own BFF, not Google's API
-    const response = await fetch(`${BFF_BASE_URL}/generate-story`, {
+    // 1. Call the Vercel serverless function
+    const response = await fetch(`/api/generate-story`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, grade, language, emotion, userRole, voice }),
@@ -183,7 +181,7 @@ export async function generateStoryAndAudio(
     if (error.name === 'AbortError') {
         throw new APIError("The request to generate the story timed out after 60 seconds. This can happen with complex topics. Please try again.");
     }
-    console.error("Error communicating with BFF for story generation:", error);
+    console.error("Error communicating with API for story generation:", error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -214,7 +212,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
         reader.readAsDataURL(audioBlob);
         const base64Audio = await readPromise;
 
-        const response = await fetch(`${BFF_BASE_URL}/transcribe-audio`, {
+        const response = await fetch(`/api/transcribe-audio`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ audioData: base64Audio, mimeType: audioBlob.type }),
@@ -229,7 +227,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
         return transcription;
 
     } catch (error: any) {
-        console.error("Error communicating with BFF for transcription:", error);
+        console.error("Error communicating with API for transcription:", error);
         if (error instanceof AppError) {
             throw error;
         }
