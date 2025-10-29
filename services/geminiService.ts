@@ -117,13 +117,19 @@ export async function generateStoryAndAudio(
     throw new NetworkError();
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
+
   try {
     // 1. Call your own BFF, not Google's API
     const response = await fetch(`${BFF_BASE_URL}/generate-story`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, grade, language, emotion, userRole, voice }),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'The AI service failed with an unknown error.' }));
@@ -161,6 +167,10 @@ export async function generateStoryAndAudio(
 
     return { story, audioUrl, imageUrl };
   } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+        throw new APIError("The request to generate the story timed out after 60 seconds. This can happen with complex topics. Please try again.");
+    }
     console.error("Error communicating with BFF for story generation:", error);
     if (error instanceof AppError) {
       throw error;

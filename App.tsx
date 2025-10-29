@@ -60,6 +60,16 @@ const App: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    // Revoke the object URL to avoid memory leaks when the component unmounts
+    // or when a new story is generated.
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
   if (error) {
     // This will be caught by the nearest Error Boundary
     throw error;

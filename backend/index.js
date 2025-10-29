@@ -1,3 +1,5 @@
+
+
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } = require('@google/genai');
@@ -8,6 +10,23 @@ const app = express();
 // to your frontend's domain.
 app.use(cors()); 
 app.use(express.json({ limit: '10mb' }));
+
+// --- AI Client Initialization ---
+// Initialize the AI client once when the server starts.
+// This is more efficient and will cause the server to fail fast if the API key is missing.
+let ai;
+try {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        // This will be caught and logged, preventing a crash on start, but will fail requests.
+        throw new Error('API_KEY environment variable is not set.');
+    }
+    ai = new GoogleGenAI({ apiKey });
+} catch (e) {
+    console.error("CRITICAL: Failed to initialize GoogleGenAI. The server will not be able to process AI requests.", e.message);
+    // `ai` will remain undefined, and requests will fail with a clear message.
+}
+
 
 // A helper function to provide more specific error messages
 function handleGoogleAIError(error, res, context) {
@@ -33,20 +52,16 @@ function handleGoogleAIError(error, res, context) {
 
 // Endpoint to generate both the story and the audio
 app.post('/generate-story', async (req, res) => {
-    try {
-        const apiKey = process.env.API_KEY;
-        if (!apiKey) {
-            console.error("API_KEY environment variable is not set.");
-            return res.status(500).json({ error: 'The AI service has not been configured by the server administrator. Missing API Key.' });
-        }
+    if (!ai) {
+        return res.status(500).json({ error: 'The AI service is not initialized on the server. Please check server logs for configuration errors like a missing API key.' });
+    }
 
+    try {
         const { topic, grade, language, emotion, userRole, voice } = req.body;
 
         if (!topic || !grade || !language || !emotion || !userRole || !voice) {
             return res.status(400).json({ error: 'Missing required fields in the request.' });
         }
-
-        const ai = new GoogleGenAI({ apiKey });
         
         // Add safety settings to be less restrictive for educational content
         const safetySettings = [
@@ -152,18 +167,16 @@ Generate the story now.
 });
 
 app.post('/transcribe-audio', async (req, res) => {
+    if (!ai) {
+        return res.status(500).json({ error: 'The AI service is not initialized on the server. Please check server logs for configuration errors like a missing API key.' });
+    }
+    
     try {
-        const apiKey = process.env.API_KEY;
-        if (!apiKey) {
-            return res.status(500).json({ error: 'The AI service has not been configured. Missing API Key.' });
-        }
-
         const { audioData, mimeType } = req.body;
         if (!audioData || !mimeType) {
             return res.status(400).json({ error: 'Missing audioData or mimeType.' });
         }
 
-        const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [
