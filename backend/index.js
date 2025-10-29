@@ -56,7 +56,7 @@ Generate the story now.
 `;
         
         const storyResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: 'gemini-2.5-flash',
             contents: storyPrompt,
         });
 
