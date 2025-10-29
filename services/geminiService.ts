@@ -120,7 +120,7 @@ export async function generateStory(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20-second timeout for story text
+  const timeoutId = setTimeout(() => controller.abort(), 9500); // 9.5-second timeout for Vercel Hobby tier
 
   try {
     const response = await fetch(`/api/generate-story`, {
@@ -157,13 +157,13 @@ export async function generateStory(
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-        throw new APIError("The request to generate the story timed out. Please try again.");
+        throw new APIError("The request to generate the story timed out. The AI might be under heavy load. Please try again.");
     }
     console.error("Error communicating with API for story generation:", error);
     if (error instanceof AppError) {
       throw error;
     }
-    throw new APIError(`An unexpected issue occurred. Details: ${error.message}`);
+    throw new APIError(`An unexpected issue occurred. Please check your connection and try again. Details: ${error.message}`);
   }
 }
 
@@ -176,12 +176,17 @@ export async function generateAudio(storyMarkdown: string, voice: string): Promi
         return null;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
+
     try {
         const response = await fetch(`/api/generate-audio`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ storyMarkdown, voice }),
+            signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Audio generation service failed.' }));
@@ -198,7 +203,12 @@ export async function generateAudio(storyMarkdown: string, voice: string): Promi
         return null;
 
     } catch (error: any) {
-        console.warn("Could not generate narration:", error.message);
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            console.warn("Audio generation timed out.");
+        } else {
+            console.warn("Could not generate narration:", error.message);
+        }
         // We don't throw a user-facing error here, as audio is non-critical.
         return null;
     }
@@ -214,12 +224,17 @@ export async function generateImage(topic: string, introduction: string): Promis
         return null;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
+
     try {
         const response = await fetch(`/api/generate-image`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ topic, introduction }),
+            signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Image generation service failed.' }));
@@ -234,7 +249,12 @@ export async function generateImage(topic: string, introduction: string): Promis
         return null;
 
     } catch (error: any) {
-        console.warn("Could not generate illustration:", error.message);
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            console.warn("Image generation timed out.");
+        } else {
+            console.warn("Could not generate illustration:", error.message);
+        }
         // We don't throw a user-facing error here, as the image is non-critical.
         return null;
     }
