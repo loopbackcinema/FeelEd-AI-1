@@ -6,7 +6,7 @@ import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoginModal } from './components/LoginModal';
-import { generateStoryAndAudio, generateImage } from './services/geminiService';
+import { generateStory, generateAudio, generateImage } from './services/geminiService';
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
 import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, TTS_VOICES } from './constants';
@@ -83,12 +83,12 @@ const App: React.FC = () => {
     setImageUrl(null);
 
     try {
-      // Step 1: Generate the critical content (story and audio)
-      const { story: generatedStory, audioUrl: generatedAudioUrl } = await generateStoryAndAudio(topic, grade, language, emotion, userRole, voice);
+      // Step 1: Generate the critical story text first.
+      const { story: generatedStory, storyMarkdown } = await generateStory(topic, grade, language, emotion, userRole);
       
-      // Update state immediately so user sees content
+      // We have the core content! Stop the main loader and display the story.
+      setIsLoading(false);
       setStory(generatedStory);
-      setAudioUrl(generatedAudioUrl);
       
       if (!user) {
           const newCount = guestStoryCount + 1;
@@ -96,13 +96,20 @@ const App: React.FC = () => {
           localStorage.setItem('guestStoryCount', String(newCount));
       }
       
-      // Step 2: Generate the non-critical illustration in the background
-      // This runs after the main content is already displayed to the user.
+      // Step 2 & 3: Generate audio and image in the background.
+      // These are non-blocking and will update the UI when they are ready.
+      generateAudio(storyMarkdown, voice).then(audioUrlResult => {
+          setAudioUrl(audioUrlResult);
+      }).catch(audioError => {
+          console.warn("Failed to generate audio, but story is available:", audioError);
+          setAudioUrl(null);
+      });
+      
       generateImage(generatedStory.title, generatedStory.introduction).then(imageUrlResult => {
           setImageUrl(imageUrlResult);
       }).catch(imageError => {
           console.warn("Failed to generate image, but story is available:", imageError);
-          setImageUrl(null); // Ensure image is null if generation fails
+          setImageUrl(null);
       });
 
     } catch (err: any) {
@@ -123,9 +130,7 @@ const App: React.FC = () => {
         const appError = new Error(message);
         appError.name = title;
         setError(appError);
-        
-    } finally {
-      setIsLoading(false); // This allows the UI to render the story while the image loads
+        setIsLoading(false); // Ensure loader stops on critical error.
     }
   }, [topic, grade, language, emotion, userRole, voice, user, guestStoryCount]);
   
@@ -183,12 +188,12 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    // Show loader only during the initial, critical content fetch.
-    if (isLoading && !story) {
+    // Show loader only during the initial, critical text fetch.
+    if (isLoading) {
       return <Loader />;
     }
 
-    // Once story is available, show it. The image will load in when it's ready.
+    // Once story is available, show it. Audio/image will load in when ready.
     if (story) {
       return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} />;
     }

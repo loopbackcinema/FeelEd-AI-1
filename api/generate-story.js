@@ -1,5 +1,5 @@
 
-const { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } = require('@google/genai');
+const { GoogleGenAI, HarmCategory, HarmBlockThreshold } = require('@google/genai');
 
 async function allowCors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -47,9 +47,9 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { topic, grade, language, emotion, userRole, voice } = req.body;
+        const { topic, grade, language, emotion, userRole } = req.body;
 
-        if (!topic || !grade || !language || !emotion || !userRole || !voice) {
+        if (!topic || !grade || !language || !emotion || !userRole) {
             return res.status(400).json({ error: 'Missing required fields in the request.' });
         }
         
@@ -95,26 +95,9 @@ Generate the story now.`;
         }
         const storyMarkdown = storyResponse.text;
         
-        const ttsPrompt = `Read the following story in a ${emotion} tone.`;
-        const fullTextForTTS = `${ttsPrompt}\n\n${storyMarkdown.replace(/^#\s/gm, '')}`;
-        const audioResponse = await ai.models.generateContent({
-            model: "gemini-2.5-flash-preview-tts",
-            contents: [{ parts: [{ text: fullTextForTTS }] }],
-            config: {
-                responseModalities: [Modality.AUDIO],
-                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-            },
-        });
-        
-        const audioBase64 = audioResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data || null;
-
-        if (!audioBase64) {
-            return res.status(500).json({ error: 'Failed to generate audio narration for the story.' });
-        }
-        
-        return res.status(200).json({ storyMarkdown, audioBase64 });
+        return res.status(200).json({ storyMarkdown });
 
     } catch (error) {
-        return handleGoogleAIError(error, res, 'story and audio generation');
+        return handleGoogleAIError(error, res, 'story text generation');
     }
 };

@@ -108,26 +108,25 @@ function parseStoryFromMarkdown(markdown: string): Partial<Story> {
 }
 
 
-export async function generateStoryAndAudio(
+export async function generateStory(
   topic: string,
   grade: string,
   language: string,
   emotion: string,
-  userRole: string,
-  voice: string
-): Promise<{ story: Story; audioUrl: string }> {
+  userRole: string
+): Promise<{ story: Story; storyMarkdown: string }> {
   if (!navigator.onLine) {
     throw new NetworkError();
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20-second timeout for story text
 
   try {
     const response = await fetch(`/api/generate-story`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, grade, language, emotion, userRole, voice }),
+      body: JSON.stringify({ topic, grade, language, emotion, userRole }),
       signal: controller.signal,
     });
     
@@ -135,19 +134,13 @@ export async function generateStoryAndAudio(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'The AI service failed with an unknown error.' }));
-      if (response.status === 429) {
-          throw new APIError("You are making requests too quickly. Please wait a moment.");
-      }
       throw new APIError(errorData.error || `The AI service failed with status: ${response.status}.`);
     }
 
-    const { storyMarkdown, audioBase64 } = await response.json();
+    const { storyMarkdown } = await response.json();
 
     if (!storyMarkdown) {
         throw new StoryGenerationError("The AI didn't generate a story. Please try adjusting your topic.");
-    }
-    if (!audioBase64) {
-        throw new TTSError("The story was created, but audio narration failed. Please try again.");
     }
 
     const story: Story = parseStoryFromMarkdown(storyMarkdown) as Story;
@@ -157,27 +150,60 @@ export async function generateStoryAndAudio(
     const missingKeys = requiredKeys.filter(key => !story[key] || !story[key]?.trim());
 
     if (missingKeys.length > 0) {
-      console.warn(`AI story generation was incomplete. Missing sections: ${missingKeys.join(', ')}`);
       throw new StoryGenerationError(`The AI didn't generate a complete story. It missed the following sections: ${missingKeys.join(', ')}. Please try again.`);
     }
 
-    const pcmData = decode(audioBase64);
-    const wavBlob = pcmToWav(pcmData);
-    const audioUrl = URL.createObjectURL(wavBlob);
-
-    return { story, audioUrl };
+    return { story, storyMarkdown };
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-        throw new APIError("The request to generate the story timed out after 60 seconds. This can happen with complex topics. Please try again.");
+        throw new APIError("The request to generate the story timed out. Please try again.");
     }
     console.error("Error communicating with API for story generation:", error);
     if (error instanceof AppError) {
       throw error;
     }
-    throw new APIError(`An unexpected issue occurred. Please check your connection and try again. Details: ${error.message}`);
+    throw new APIError(`An unexpected issue occurred. Details: ${error.message}`);
   }
 }
+
+/**
+ * Sends story markdown to the API to generate audio narration.
+ */
+export async function generateAudio(storyMarkdown: string, voice: string): Promise<string | null> {
+    if (!navigator.onLine) {
+        console.warn("Offline, skipping audio generation.");
+        return null;
+    }
+
+    try {
+        const response = await fetch(`/api/generate-audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storyMarkdown, voice }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Audio generation service failed.' }));
+            throw new TTSError(errorData.error || `Audio generation failed with status: ${response.status}`);
+        }
+
+        const { audioBase64 } = await response.json();
+        
+        if (audioBase64) {
+            const pcmData = decode(audioBase64);
+            const wavBlob = pcmToWav(pcmData);
+            return URL.createObjectURL(wavBlob);
+        }
+        return null;
+
+    } catch (error: any) {
+        console.warn("Could not generate narration:", error.message);
+        // We don't throw a user-facing error here, as audio is non-critical.
+        return null;
+    }
+}
+
 
 /**
  * Sends a topic and introduction to the API to generate an illustration.
