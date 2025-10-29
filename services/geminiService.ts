@@ -2,9 +2,6 @@
 import type { Story } from '../types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
 
-// The BFF_BASE_URL is no longer needed as we are using Vercel Serverless Functions
-// which are on the same origin.
-
 // --- Helper functions for WAV conversion (remain on frontend) ---
 
 /**
@@ -118,7 +115,7 @@ export async function generateStoryAndAudio(
   emotion: string,
   userRole: string,
   voice: string
-): Promise<{ story: Story; audioUrl: string; imageUrl: string | null }> {
+): Promise<{ story: Story; audioUrl: string }> {
   if (!navigator.onLine) {
     throw new NetworkError();
   }
@@ -127,7 +124,6 @@ export async function generateStoryAndAudio(
   const timeoutId = setTimeout(() => controller.abort(), 60000); // 60-second timeout
 
   try {
-    // 1. Call the Vercel serverless function
     const response = await fetch(`/api/generate-story`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -139,14 +135,13 @@ export async function generateStoryAndAudio(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'The AI service failed with an unknown error.' }));
-      // Distinguish between different kinds of BFF errors if the BFF provides them
-      if (response.status === 429) { // Example: rate limit
+      if (response.status === 429) {
           throw new APIError("You are making requests too quickly. Please wait a moment.");
       }
       throw new APIError(errorData.error || `The AI service failed with status: ${response.status}.`);
     }
 
-    const { storyMarkdown, audioBase64, imageBase64 } = await response.json();
+    const { storyMarkdown, audioBase64 } = await response.json();
 
     if (!storyMarkdown) {
         throw new StoryGenerationError("The AI didn't generate a story. Please try adjusting your topic.");
@@ -170,12 +165,7 @@ export async function generateStoryAndAudio(
     const wavBlob = pcmToWav(pcmData);
     const audioUrl = URL.createObjectURL(wavBlob);
 
-    let imageUrl: string | null = null;
-    if (imageBase64) {
-      imageUrl = `data:image/jpeg;base64,${imageBase64}`;
-    }
-
-    return { story, audioUrl, imageUrl };
+    return { story, audioUrl };
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
@@ -185,10 +175,45 @@ export async function generateStoryAndAudio(
     if (error instanceof AppError) {
       throw error;
     }
-    // Catches network errors from fetch itself
     throw new APIError(`An unexpected issue occurred. Please check your connection and try again. Details: ${error.message}`);
   }
 }
+
+/**
+ * Sends a topic and introduction to the API to generate an illustration.
+ */
+export async function generateImage(topic: string, introduction: string): Promise<string | null> {
+    if (!navigator.onLine) {
+        console.warn("Offline, skipping image generation.");
+        return null;
+    }
+
+    try {
+        const response = await fetch(`/api/generate-image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, introduction }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Image generation service failed.' }));
+            throw new Error(errorData.error || `Image generation failed with status: ${response.status}`);
+        }
+
+        const { imageBase64 } = await response.json();
+        
+        if (imageBase64) {
+            return `data:image/jpeg;base64,${imageBase64}`;
+        }
+        return null;
+
+    } catch (error: any) {
+        console.warn("Could not generate illustration:", error.message);
+        // We don't throw a user-facing error here, as the image is non-critical.
+        return null;
+    }
+}
+
 
 /**
  * Sends an audio blob to the BFF for transcription.
@@ -202,8 +227,6 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
         const reader = new FileReader();
         const readPromise = new Promise<string>((resolve, reject) => {
             reader.onloadend = () => {
-                // result is "data:audio/webm;base64,...."
-                // We only want the base64 part
                 const base64data = (reader.result as string).split(',')[1];
                 resolve(base64data);
             };

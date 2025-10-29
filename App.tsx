@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -7,7 +6,7 @@ import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoginModal } from './components/LoginModal';
-import { generateStoryAndAudio } from './services/geminiService';
+import { generateStoryAndAudio, generateImage } from './services/geminiService';
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
 import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, TTS_VOICES } from './constants';
@@ -18,7 +17,6 @@ interface GoogleJwtPayload {
   picture: string;
 }
 
-// The window.aistudio and API key logic are no longer needed.
 declare global {
     interface Window {
         google: any;
@@ -48,7 +46,6 @@ const App: React.FC = () => {
   const wasLoginTriggeredBySubmit = useRef<boolean>(false);
 
   useEffect(() => {
-    // Check for persisted user session
     try {
       const storedUser = localStorage.getItem('feelEdUser');
       if (storedUser) {
@@ -61,8 +58,6 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Revoke the object URL to avoid memory leaks when the component unmounts
-    // or when a new story is generated.
     return () => {
       if (audioUrl) {
         URL.revokeObjectURL(audioUrl);
@@ -71,13 +66,12 @@ const App: React.FC = () => {
   }, [audioUrl]);
 
   if (error) {
-    // This will be caught by the nearest Error Boundary
     throw error;
   }
 
   const startStoryGeneration = useCallback(async () => {
-    if (!topic.trim() || !grade || !language || !emotion || !userRole) {
-        const formError = new Error("Please fill out all fields before generating a story.");
+    if (!topic.trim()) {
+        const formError = new Error("Please enter a topic to generate a story.");
         formError.name = "Incomplete Form";
         setError(formError);
         return;
@@ -89,23 +83,32 @@ const App: React.FC = () => {
     setImageUrl(null);
 
     try {
-      // The streaming callback is no longer needed with the BFF architecture.
-      const result = await generateStoryAndAudio(topic, grade, language, emotion, userRole, voice);
-      setStory(result.story);
-      setAudioUrl(result.audioUrl);
-      setImageUrl(result.imageUrl);
+      // Step 1: Generate the critical content (story and audio)
+      const { story: generatedStory, audioUrl: generatedAudioUrl } = await generateStoryAndAudio(topic, grade, language, emotion, userRole, voice);
+      
+      // Update state immediately so user sees content
+      setStory(generatedStory);
+      setAudioUrl(generatedAudioUrl);
       
       if (!user) {
           const newCount = guestStoryCount + 1;
           setGuestStoryCount(newCount);
           localStorage.setItem('guestStoryCount', String(newCount));
       }
+      
+      // Step 2: Generate the non-critical illustration in the background
+      // This runs after the main content is already displayed to the user.
+      generateImage(generatedStory.title, generatedStory.introduction).then(imageUrlResult => {
+          setImageUrl(imageUrlResult);
+      }).catch(imageError => {
+          console.warn("Failed to generate image, but story is available:", imageError);
+          setImageUrl(null); // Ensure image is null if generation fails
+      });
 
     } catch (err: any) {
         console.error(err);
-
         let title = "An Unexpected Error Occurred";
-        let message = "Something went wrong. Please try again. If the problem persists, contact support.";
+        let message = "Something went wrong. Please try again.";
 
         if (err instanceof AppError) {
             message = err.message;
@@ -122,7 +125,7 @@ const App: React.FC = () => {
         setError(appError);
         
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // This allows the UI to render the story while the image loads
     }
   }, [topic, grade, language, emotion, userRole, voice, user, guestStoryCount]);
   
@@ -152,7 +155,6 @@ const App: React.FC = () => {
     }
   };
 
-
   const handleLogout = () => {
     if (window.google) {
         window.google.accounts.id.disableAutoSelect();
@@ -165,13 +167,11 @@ const App: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!user && guestStoryCount >= 1) {
       wasLoginTriggeredBySubmit.current = true;
       setShowLoginModal(true);
       return;
     }
-    
     startStoryGeneration();
   };
 
@@ -183,10 +183,12 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (isLoading) {
+    // Show loader only during the initial, critical content fetch.
+    if (isLoading && !story) {
       return <Loader />;
     }
 
+    // Once story is available, show it. The image will load in when it's ready.
     if (story) {
       return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} />;
     }
