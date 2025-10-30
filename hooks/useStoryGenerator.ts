@@ -27,13 +27,23 @@ export const useStoryGenerator = (useStoryCredit: () => void) => {
     setAudioState('loading');
 
     try {
-      const { story: generatedStory, storyMarkdown } = await generateStory(topic, grade, language, emotion, userRole);
+      const { story: generatedStory } = await generateStory(topic, grade, language, emotion, userRole);
       setStory(generatedStory);
       
       useStoryCredit(); // Consume a credit now that the story is successfully generated
 
-      // Generate audio, but don't block the UI from showing the story
-      generateAudio(storyMarkdown, voice).then(url => {
+      // Construct a clean, plain-text version of the story for narration
+      const storyTextForNarration = [
+        generatedStory.title,
+        generatedStory.introduction,
+        generatedStory.emotional_trigger,
+        generatedStory.concept_explanation,
+        generatedStory.resolution,
+        generatedStory.moral_message
+      ].filter(Boolean).join('\n\n');
+
+      // Generate audio with the clean text, not the raw markdown
+      generateAudio(storyTextForNarration, voice).then(url => {
           setAudioUrl(url);
           setAudioState(url ? 'success' : 'failed');
       });

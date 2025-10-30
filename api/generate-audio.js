@@ -48,51 +48,35 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { storyMarkdown, voice } = req.body;
+        const { storyText, voice } = req.body;
 
-        if (!storyMarkdown || !voice) {
-            return res.status(400).json({ error: 'Missing storyMarkdown or voice for audio generation.' });
+        if (!storyText || !voice) {
+            return res.status(400).json({ error: 'Missing storyText or voice for audio generation.' });
         }
         
-        // Clean the markdown to get only the story content for narration.
-        let cleanStoryText = storyMarkdown;
-
-        // 1. Remove the user request block if it exists
-        const requestBlockIndex = cleanStoryText.indexOf('---');
-        if (requestBlockIndex !== -1) {
-            cleanStoryText = cleanStoryText.substring(0, requestBlockIndex);
-        }
-
-        // 2. Remove all markdown heading lines (e.g., # Title:)
-        cleanStoryText = cleanStoryText.replace(/^#\s+[^:\n]+:?\s*\n/gm, '');
-
-        // 3. Trim whitespace and collapse multiple newlines into a maximum of two
-        cleanStoryText = cleanStoryText.trim().replace(/\n{3,}/g, '\n\n');
-        
-        // 4. CRITICAL: Truncate the text if it's too long to prevent timeouts.
-        if (cleanStoryText.length > MAX_TTS_CHARACTERS) {
-            console.warn(`TTS input truncated from ${cleanStoryText.length} to ${MAX_TTS_CHARACTERS} characters.`);
-            cleanStoryText = cleanStoryText.substring(0, MAX_TTS_CHARACTERS);
+        // The text now comes pre-cleaned from the frontend. We just do a safety trim.
+        let textToNarrate = storyText;
+        if (textToNarrate.length > MAX_TTS_CHARACTERS) {
+            console.warn(`TTS input truncated from ${textToNarrate.length} to ${MAX_TTS_CHARACTERS} characters.`);
+            textToNarrate = textToNarrate.substring(0, MAX_TTS_CHARACTERS);
         }
         
-        // 5. Check if there's any text left to narrate after cleaning.
-        if (!cleanStoryText) {
-            return res.status(400).json({ error: 'Cannot generate audio from an empty or malformed story.' });
+        if (!textToNarrate.trim()) {
+            return res.status(400).json({ error: 'Cannot generate audio from empty text.' });
         }
 
         // Log the exact text being sent to TTS for debugging
-        console.log(`Sending ${cleanStoryText.length} characters to TTS service. Text: "${cleanStoryText.substring(0, 100)}..."`);
+        console.log(`Sending ${textToNarrate.length} characters to TTS service. Text: "${textToNarrate.substring(0, 100)}..."`);
         
         const audioResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
-            contents: [{ parts: [{ text: cleanStoryText }] }],
+            contents: [{ parts: [{ text: textToNarrate }] }],
             config: {
                 responseModalities: [Modality.AUDIO],
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
             },
         });
         
-        // FIX: The TTS response has a single part with audio data. Access it directly.
         const audioBase64 = audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
         if (!audioBase64) {

@@ -186,9 +186,9 @@ export async function generateStory(
 }
 
 /**
- * Sends story markdown to the API to generate audio narration.
+ * Sends clean story text to the API to generate audio narration.
  */
-export async function generateAudio(storyMarkdown: string, voice: string): Promise<string | null> {
+export async function generateAudio(storyText: string, voice: string): Promise<string | null> {
     if (!navigator.onLine) {
         console.warn("Offline, skipping audio generation.");
         return null;
@@ -201,7 +201,7 @@ export async function generateAudio(storyMarkdown: string, voice: string): Promi
         const response = await fetch(`/api/generate-audio`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storyMarkdown, voice }),
+            body: JSON.stringify({ storyText, voice }),
             signal: controller.signal,
         });
         clearTimeout(timeoutId);
