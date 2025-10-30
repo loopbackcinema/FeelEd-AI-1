@@ -82,7 +82,7 @@ module.exports = async (req, res) => {
 
         const audioResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
-            contents: [{ parts: [{ text: cleanStoryText }] }],
+            contents: { parts: [{ text: cleanStoryText }] },
             config: {
                 responseModalities: ['AUDIO'],
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
