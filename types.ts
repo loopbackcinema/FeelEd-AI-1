@@ -1,5 +1,11 @@
 
 
+// FIX: Moved AIStudio interface here from App.tsx to resolve a TypeScript type conflict.
+export interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+}
+
 export interface Story {
   title: string;
   emotion_tone: string;

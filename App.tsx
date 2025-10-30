@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -6,8 +8,11 @@ import { Loader } from './components/Loader';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { LoginModal } from './components/LoginModal';
+import { ApiKeyModal } from './components/ApiKeyModal';
+import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
 import { generateStory, generateAudio, generateImage } from './services/geminiService';
-import type { Story, User } from './types';
+// FIX: Import AIStudio from types.ts to resolve a TypeScript type conflict.
+import type { Story, User, AIStudio } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
 import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, TTS_VOICES } from './constants';
 
@@ -17,9 +22,16 @@ interface GoogleJwtPayload {
   picture: string;
 }
 
+// FIX: Moved the AIStudio interface to types.ts to resolve a global type declaration conflict.
+// interface AIStudio {
+//     hasSelectedApiKey: () => Promise<boolean>;
+//     openSelectKey: () => Promise<void>;
+// }
+
 declare global {
     interface Window {
         google: any;
+        aistudio?: AIStudio;
     }
 }
 
@@ -44,6 +56,13 @@ const App: React.FC = () => {
   );
   
   const wasLoginTriggeredBySubmit = useRef<boolean>(false);
+  
+  // --- New state for API Key Management ---
+  const [isApiKeyReady, setIsApiKeyReady] = useState<boolean>(false);
+  const [isKeyCheckInProgress, setIsKeyCheckInProgress] = useState<boolean>(true);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [envError, setEnvError] = useState<string | null>(null);
+  const wasStoryGenPendingApiKey = useRef<boolean>(false);
 
   useEffect(() => {
     try {
@@ -55,6 +74,33 @@ const App: React.FC = () => {
       console.error("Failed to parse user session, clearing storage.", e);
       localStorage.removeItem('feelEdUser');
     }
+  }, []);
+  
+  useEffect(() => {
+    const checkApiKey = async () => {
+        setIsKeyCheckInProgress(true);
+        setApiKeyError(null);
+        setEnvError(null);
+
+        if (typeof window.aistudio === 'undefined') {
+            setEnvError("The required AI Studio environment is not available. This app may not be running in the correct context.");
+            setIsKeyCheckInProgress(false);
+            return;
+        }
+
+        try {
+            const hasKey = await window.aistudio.hasSelectedApiKey();
+            if (hasKey) {
+                setIsApiKeyReady(true);
+            }
+        } catch (e) {
+            console.error("Error checking for API key:", e);
+            setApiKeyError("An error occurred while checking your API key status.");
+        } finally {
+            setIsKeyCheckInProgress(false);
+        }
+    };
+    checkApiKey();
   }, []);
 
   useEffect(() => {
@@ -81,6 +127,7 @@ const App: React.FC = () => {
     setStory(null);
     setAudioUrl(null);
     setImageUrl(null);
+    setApiKeyError(null); // Clear previous key errors on a new attempt
 
     try {
       // Step 1: Generate the critical story text first.
@@ -97,17 +144,12 @@ const App: React.FC = () => {
       }
       
       // Step 2 & 3: Generate audio and image in the background.
-      // These are non-blocking and will update the UI when they are ready.
-      generateAudio(storyMarkdown, voice).then(audioUrlResult => {
-          setAudioUrl(audioUrlResult);
-      }).catch(audioError => {
+      generateAudio(storyMarkdown, voice).then(setAudioUrl).catch(audioError => {
           console.warn("Failed to generate audio, but story is available:", audioError);
           setAudioUrl(null);
       });
       
-      generateImage(generatedStory.title, generatedStory.introduction).then(imageUrlResult => {
-          setImageUrl(imageUrlResult);
-      }).catch(imageError => {
+      generateImage(generatedStory.title, generatedStory.introduction).then(setImageUrl).catch(imageError => {
           console.warn("Failed to generate image, but story is available:", imageError);
           setImageUrl(null);
       });
@@ -119,10 +161,15 @@ const App: React.FC = () => {
 
         if (err instanceof AppError) {
             message = err.message;
+            if (err instanceof APIError && (message.includes('not configured') || message.toLowerCase().includes('api key'))) {
+                setIsApiKeyReady(false); // Key is bad, reset state
+                setApiKeyError(message);
+                setIsLoading(false);
+                return; // Stop further error handling; the API modal will appear
+            }
             if (err instanceof NetworkError) title = "Network Connection Error";
             else if (err instanceof APIError) title = "AI Service Error";
             else if (err instanceof StoryGenerationError) title = "Story Generation Failed";
-            else if (err instanceof TTSError) title = "Audio Narration Failed";
         } else if (err.message) {
             message = err.message;
         }
@@ -137,9 +184,28 @@ const App: React.FC = () => {
   useEffect(() => {
     if (user && wasLoginTriggeredBySubmit.current) {
         wasLoginTriggeredBySubmit.current = false;
-        startStoryGeneration();
+        // Re-trigger the submit logic after successful login
+        handleSubmit(new Event('submit', { cancelable: true }) as unknown as React.FormEvent);
     }
   }, [user, startStoryGeneration]);
+
+  const handleSelectKey = async () => {
+      if (typeof window.aistudio === 'undefined') {
+          setEnvError("The required AI Studio environment is not available.");
+          return;
+      }
+      setApiKeyError(null);
+      try {
+          await window.aistudio.openSelectKey();
+          setIsApiKeyReady(true);
+          if (wasStoryGenPendingApiKey.current) {
+              wasStoryGenPendingApiKey.current = false;
+              startStoryGeneration();
+          }
+      } catch (e) {
+          console.error("Error or dismissal during API key selection:", e);
+      }
+  };
 
   const handleLoginSuccess = (credential: string) => {
     try {
@@ -177,6 +243,11 @@ const App: React.FC = () => {
       setShowLoginModal(true);
       return;
     }
+    if (!isApiKeyReady) {
+        wasStoryGenPendingApiKey.current = true;
+        handleSelectKey();
+        return;
+    }
     startStoryGeneration();
   };
 
@@ -188,16 +259,18 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    // Show loader only during the initial, critical text fetch.
+    if (isKeyCheckInProgress) {
+      return <Loader />;
+    }
+    if (!isApiKeyReady && userRole === 'Student') {
+      return <StudentApiKeyMessage />;
+    }
     if (isLoading) {
       return <Loader />;
     }
-
-    // Once story is available, show it. Audio/image will load in when ready.
     if (story) {
       return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} />;
     }
-
     return (
       <StoryInputForm
         topic={topic}
@@ -232,6 +305,14 @@ const App: React.FC = () => {
         <LoginModal 
             onLoginSuccess={handleLoginSuccess}
             onDismiss={() => setShowLoginModal(false)}
+        />
+      )}
+      
+      {!isApiKeyReady && !isKeyCheckInProgress && userRole !== 'Student' && (
+        <ApiKeyModal 
+          handleSelectKey={handleSelectKey}
+          apiKeyError={apiKeyError}
+          envError={envError}
         />
       )}
     </div>
