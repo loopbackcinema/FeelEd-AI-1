@@ -190,7 +190,7 @@ export async function generateAudio(storyMarkdown: string, voice: string): Promi
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout
 
     try {
         const response = await fetch(`/api/generate-audio`, {
@@ -265,7 +265,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     } catch (error: any) {
         console.error("Error communicating with API for transcription:", error);
         if (error instanceof AppError) {
-            throw error;
+          throw error;
         }
         throw new APIError(`Transcription failed. Details: ${error.message}`);
     }

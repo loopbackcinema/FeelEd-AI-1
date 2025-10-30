@@ -1,5 +1,9 @@
 const { GoogleGenAI, Modality } = require('@google/genai');
 
+// A hard limit on characters for the TTS service to prevent Vercel function timeouts.
+// 1500 chars is roughly 250 words, which should generate audio well within the 10s limit.
+const MAX_TTS_CHARACTERS = 1500;
+
 async function allowCors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -51,8 +55,6 @@ module.exports = async (req, res) => {
         }
         
         // Clean the markdown to get only the story content for narration.
-        // This removes markdown headings, the user request block, and extra newlines,
-        // which makes the TTS request faster and more reliable to avoid timeouts.
         let cleanStoryText = storyMarkdown;
 
         // 1. Remove the user request block if it exists
@@ -66,6 +68,12 @@ module.exports = async (req, res) => {
 
         // 3. Trim whitespace and collapse multiple newlines into a maximum of two
         cleanStoryText = cleanStoryText.trim().replace(/\n{3,}/g, '\n\n');
+        
+        // 4. CRITICAL: Truncate the text if it's too long to prevent timeouts.
+        if (cleanStoryText.length > MAX_TTS_CHARACTERS) {
+            console.warn(`TTS input truncated from ${cleanStoryText.length} to ${MAX_TTS_CHARACTERS} characters.`);
+            cleanStoryText = cleanStoryText.substring(0, MAX_TTS_CHARACTERS);
+        }
 
         const audioResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",

@@ -78,7 +78,7 @@ USER REQUEST:
 - My Role: "${userRole}"
 ---
 
-IMPORTANT: The total length of the story (from Introduction to Moral) must be concise and ideally under 300 words to ensure it can be narrated quickly.
+IMPORTANT: The total length of the story (from Introduction to Moral) must be concise and VERY STRICTLY under 250 words to ensure it can be narrated quickly.
 
 Generate the story now.`;
         
