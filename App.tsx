@@ -19,12 +19,6 @@ interface GoogleJwtPayload {
   picture: string;
 }
 
-// FIX: Moved the AIStudio interface to types.ts to resolve a global type declaration conflict.
-// interface AIStudio {
-//     hasSelectedApiKey: () => Promise<boolean>;
-//     openSelectKey: () => Promise<void>;
-// }
-
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
   const [grade, setGrade] = useState<string>(GRADES[4]); // Default to Grade 5
@@ -51,7 +45,6 @@ const App: React.FC = () => {
   const [isApiKeyReady, setIsApiKeyReady] = useState<boolean>(false);
   const [isKeyCheckInProgress, setIsKeyCheckInProgress] = useState<boolean>(true);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [envError, setEnvError] = useState<string | null>(null);
   const wasStoryGenPendingApiKey = useRef<boolean>(false);
 
   useEffect(() => {
@@ -70,19 +63,20 @@ const App: React.FC = () => {
     const checkApiKey = async () => {
         setIsKeyCheckInProgress(true);
         setApiKeyError(null);
-        setEnvError(null);
 
         if (typeof window.aistudio === 'undefined') {
-            setEnvError("The required AI Studio environment is not available. This app may not be running in the correct context.");
+            // If the AI Studio environment is not detected, we assume the API key is
+            // configured on the backend (e.g., via Vercel environment variables).
+            // We bypass the interactive client-side check.
+            setIsApiKeyReady(true);
             setIsKeyCheckInProgress(false);
             return;
         }
 
+        // If in the AI Studio environment, perform the standard check.
         try {
             const hasKey = await window.aistudio.hasSelectedApiKey();
-            if (hasKey) {
-                setIsApiKeyReady(true);
-            }
+            setIsApiKeyReady(hasKey);
         } catch (e) {
             console.error("Error checking for API key:", e);
             setApiKeyError("An error occurred while checking your API key status.");
@@ -180,20 +174,21 @@ const App: React.FC = () => {
   }, [user, startStoryGeneration]);
 
   const handleSelectKey = async () => {
-      if (typeof window.aistudio === 'undefined') {
-          setEnvError("The required AI Studio environment is not available.");
-          return;
-      }
-      setApiKeyError(null);
-      try {
-          await window.aistudio.openSelectKey();
-          setIsApiKeyReady(true);
-          if (wasStoryGenPendingApiKey.current) {
-              wasStoryGenPendingApiKey.current = false;
-              startStoryGeneration();
+      if (window.aistudio) {
+          setApiKeyError(null);
+          try {
+              await window.aistudio.openSelectKey();
+              setIsApiKeyReady(true);
+              if (wasStoryGenPendingApiKey.current) {
+                  wasStoryGenPendingApiKey.current = false;
+                  startStoryGeneration();
+              }
+          } catch (e) {
+              console.error("Error or dismissal during API key selection:", e);
           }
-      } catch (e) {
-          console.error("Error or dismissal during API key selection:", e);
+      } else {
+        console.error("handleSelectKey called without aistudio environment.");
+        setApiKeyError("Cannot open API key selector: AI Studio environment not found.");
       }
   };
 
@@ -302,7 +297,6 @@ const App: React.FC = () => {
         <ApiKeyModal 
           handleSelectKey={handleSelectKey}
           apiKeyError={apiKeyError}
-          envError={envError}
         />
       )}
     </div>

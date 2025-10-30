@@ -1,11 +1,12 @@
-// FIX: Moved AIStudio interface here from App.tsx to resolve a TypeScript type conflict.
-export interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-}
-
-// FIX: Centralized global window type declaration to resolve type conflicts across the app.
+// FIX: To resolve a TypeScript type conflict, the AIStudio interface and the global
+// window type declaration have been consolidated here. Defining AIStudio inside `declare global`
+// ensures it's a single, global type, preventing declaration merging errors.
 declare global {
+    interface AIStudio {
+        hasSelectedApiKey: () => Promise<boolean>;
+        openSelectKey: () => Promise<void>;
+    }
+
     interface Window {
         google: any;
         aistudio?: AIStudio;
