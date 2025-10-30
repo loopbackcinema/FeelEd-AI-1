@@ -32,9 +32,12 @@ module.exports = async (req, res) => {
 
     let ai;
     try {
-        // The Text-to-Speech model authenticates via the environment variable automatically
-        // when an empty object is passed to the constructor, per documentation.
-        ai = new GoogleGenAI({});
+        const apiKey = process.env.API_KEY;
+        if (!apiKey) {
+            // This is a server configuration error, not a client error.
+            throw new Error('API_KEY environment variable is not set on the server.');
+        }
+        ai = new GoogleGenAI({ apiKey });
     } catch (e) {
         console.error("CRITICAL: Failed to initialize GoogleGenAI for TTS.", e.message);
         return res.status(500).json({ error: 'AI audio service not configured on the server.' });
