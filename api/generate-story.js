@@ -78,6 +78,8 @@ USER REQUEST:
 - My Role: "${userRole}"
 ---
 
+IMPORTANT: The total length of the story (from Introduction to Moral) must be concise and ideally under 300 words to ensure it can be narrated quickly.
+
 Generate the story now.`;
         
         // Use streaming to avoid Vercel's 10-second timeout
