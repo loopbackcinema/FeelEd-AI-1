@@ -7,7 +7,7 @@ import { Footer } from './components/Footer';
 import { LoginModal } from './components/LoginModal';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
-import { generateStory, generateAudio, generateImage } from './services/geminiService';
+import { generateStory, generateAudio } from './services/geminiService';
 // FIX: The AIStudio global type is now declared in types.ts to prevent conflicts.
 import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
@@ -29,7 +29,6 @@ const App: React.FC = () => {
 
   const [story, setStory] = useState<Story | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [view, setView] = useState<'form' | 'output'>('form');
@@ -106,7 +105,6 @@ const App: React.FC = () => {
     setIsLoading(true);
     setStory(null);
     setAudioUrl(null);
-    setImageUrl(null);
     setApiKeyError(null); // Clear previous key errors on a new attempt
     setAudioState('loading');
 
@@ -121,19 +119,14 @@ const App: React.FC = () => {
           localStorage.setItem('guestStoryCount', String(newCount));
       }
       
-      // Step 2 & 3: Generate audio and image concurrently.
+      // Step 2: Generate audio.
       const audioPromise = generateAudio(storyMarkdown, voice).then(url => {
           setAudioUrl(url);
           setAudioState(url ? 'success' : 'failed');
       });
       
-      const imagePromise = generateImage(generatedStory.title, generatedStory.introduction).then(setImageUrl).catch(imageError => {
-          console.warn("Failed to generate image, but story is available:", imageError);
-          setImageUrl(null);
-      });
-
       // Wait for non-critical assets to finish before setting isLoading to false.
-      await Promise.all([audioPromise, imagePromise]);
+      await audioPromise;
 
     } catch (err: any) {
         console.error(err);
@@ -246,7 +239,6 @@ const App: React.FC = () => {
   const handleReset = () => {
     setStory(null);
     setAudioUrl(null);
-    setImageUrl(null);
     setTopic('');
     setAudioState('idle');
     setView('form');
@@ -260,7 +252,7 @@ const App: React.FC = () => {
       return <StudentApiKeyMessage />;
     }
     if (view === 'output') {
-      return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} isLoading={isLoading} audioState={audioState} />;
+      return <StoryOutput story={story} audioUrl={audioUrl} onReset={handleReset} isLoading={isLoading} audioState={audioState} />;
     }
     return (
       <StoryInputForm

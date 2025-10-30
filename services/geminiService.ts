@@ -1,4 +1,3 @@
-
 import type { Story } from '../types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from '../types';
 
@@ -224,52 +223,6 @@ export async function generateAudio(storyMarkdown: string, voice: string): Promi
             console.warn("Could not generate narration:", error.message);
         }
         // We don't throw a user-facing error here, as audio is non-critical.
-        return null;
-    }
-}
-
-
-/**
- * Sends a topic and introduction to the API to generate an illustration.
- */
-export async function generateImage(topic: string, introduction: string): Promise<string | null> {
-    if (!navigator.onLine) {
-        console.warn("Offline, skipping image generation.");
-        return null;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
-
-    try {
-        const response = await fetch(`/api/generate-image`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic, introduction }),
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Image generation service failed.' }));
-            throw new Error(errorData.error || `Image generation failed with status: ${response.status}`);
-        }
-
-        const { imageBase64 } = await response.json();
-        
-        if (imageBase64) {
-            return `data:image/jpeg;base64,${imageBase64}`;
-        }
-        return null;
-
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            console.warn("Image generation timed out.");
-        } else {
-            console.warn("Could not generate illustration:", error.message);
-        }
-        // We don't throw a user-facing error here, as the image is non-critical.
         return null;
     }
 }

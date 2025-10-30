@@ -49,15 +49,10 @@ module.exports = async (req, res) => {
         if (!storyMarkdown || !voice) {
             return res.status(400).json({ error: 'Missing storyMarkdown or voice for audio generation.' });
         }
-
-        const emotionMatch = storyMarkdown.match(/Emotion Tone: "([^"]+)"/);
-        const emotion = emotionMatch ? emotionMatch[1] : 'neutral';
-        
-        const ttsPrompt = `Read the following story in a ${emotion} tone.`;
         
         // Clean the markdown to get only the story content for narration.
         // This removes markdown headings, the user request block, and extra newlines,
-        // which makes the TTS request faster and more reliable.
+        // which makes the TTS request faster and more reliable to avoid timeouts.
         let cleanStoryText = storyMarkdown;
 
         // 1. Remove the user request block if it exists
@@ -72,11 +67,9 @@ module.exports = async (req, res) => {
         // 3. Trim whitespace and collapse multiple newlines into a maximum of two
         cleanStoryText = cleanStoryText.trim().replace(/\n{3,}/g, '\n\n');
 
-        const fullTextForTTS = `${ttsPrompt}\n\n${cleanStoryText}`;
-
         const audioResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
-            contents: [{ parts: [{ text: fullTextForTTS }] }],
+            contents: [{ parts: [{ text: cleanStoryText }] }],
             config: {
                 responseModalities: [Modality.AUDIO],
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
