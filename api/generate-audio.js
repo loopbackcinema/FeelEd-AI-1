@@ -1,4 +1,4 @@
-const { GoogleGenAI, Modality } = require('@google/genai');
+const { GoogleGenAI } = require('@google/genai');
 
 // A hard limit on characters for the TTS service to prevent Vercel function timeouts.
 // 1500 chars is roughly 250 words, which should generate audio well within the 10s limit.
@@ -84,7 +84,7 @@ module.exports = async (req, res) => {
             model: "gemini-2.5-flash-preview-tts",
             contents: [{ parts: [{ text: cleanStoryText }] }],
             config: {
-                responseModalities: [Modality.AUDIO],
+                responseModalities: ['AUDIO'],
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
             },
         });
