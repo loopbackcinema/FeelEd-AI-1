@@ -1,3 +1,4 @@
+
 const { GoogleGenAI } = require('@google/genai');
 
 // A hard limit on characters for the TTS service to prevent Vercel function timeouts.
@@ -80,9 +81,15 @@ module.exports = async (req, res) => {
             return res.status(400).json({ error: 'Cannot generate audio from an empty or malformed story.' });
         }
 
+        // Log the exact text being sent to TTS for debugging
+        console.log(`Sending ${cleanStoryText.length} characters to TTS service. Text: "${cleanStoryText.substring(0, 100)}..."`);
+        
+        // FIX: The `contents` payload for the TTS model must be structured as a chat turn (in an array).
+        // A previous change "corrupted" this by removing the array wrapper, causing all subsequent failures.
+        // This restores the correct, required format.
         const audioResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
-            contents: { parts: [{ text: cleanStoryText }] },
+            contents: [{ parts: [{ text: cleanStoryText }] }],
             config: {
                 responseModalities: ['AUDIO'],
                 speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
@@ -92,6 +99,7 @@ module.exports = async (req, res) => {
         const audioBase64 = audioResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data || null;
 
         if (!audioBase64) {
+            console.error('TTS API call succeeded but returned no audio data. Response:', JSON.stringify(audioResponse, null, 2));
             return res.status(500).json({ error: 'Failed to generate audio narration for the story.' });
         }
         
