@@ -3,10 +3,11 @@ import type { Story } from '../types';
 import { ShareIcon } from './icons/ShareIcon';
 
 interface StoryOutputProps {
-  story: Partial<Story>;
+  story: Partial<Story> | null;
   audioUrl: string | null;
   imageUrl: string | null;
   onReset: () => void;
+  isLoading: boolean;
 }
 
 const StorySection: React.FC<{ title: string; content?: string }> = ({ title, content }) => (
@@ -25,7 +26,7 @@ const StorySection: React.FC<{ title: string; content?: string }> = ({ title, co
 );
 
 
-export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, imageUrl, onReset }) => {
+export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, imageUrl, onReset, isLoading }) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleShare = async () => {
@@ -69,13 +70,13 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, image
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="text-center">
-        <h2 className="text-4xl font-bold text-gray-800 tracking-tight">{story.title || 'Generating Title...'}</h2>
-        {story.emotion_tone && <p className="mt-2 text-lg text-indigo-600 font-medium">{story.emotion_tone} Story</p>}
+        <h2 className="text-4xl font-bold text-gray-800 tracking-tight">{story?.title || 'Generating Title...'}</h2>
+        {story?.emotion_tone && <p className="mt-2 text-lg text-indigo-600 font-medium">{story.emotion_tone} Story</p>}
       </div>
 
       <div className="w-full aspect-video bg-gray-200 rounded-2xl shadow-lg overflow-hidden animate-fade-in">
         {imageUrl ? (
-          <img src={imageUrl} alt={story.title || 'Story illustration'} className="w-full h-full object-cover" />
+          <img src={imageUrl} alt={story?.title || 'Story illustration'} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse flex items-center justify-center">
              <p className="text-gray-500 font-medium">Generating illustration...</p>
@@ -125,19 +126,20 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, image
       </div>
 
       <div className="space-y-6">
-        <StorySection title="Introduction" content={story.introduction} />
-        <StorySection title="Emotional Trigger" content={story.emotional_trigger} />
-        <StorySection title="Concept Explanation" content={story.concept_explanation} />
-        <StorySection title="Resolution" content={story.resolution} />
-        <StorySection title="Moral of the Story" content={story.moral_message} />
+        <StorySection title="Introduction" content={story?.introduction} />
+        <StorySection title="Emotional Trigger" content={story?.emotional_trigger} />
+        <StorySection title="Concept Explanation" content={story?.concept_explanation} />
+        <StorySection title="Resolution" content={story?.resolution} />
+        <StorySection title="Moral of the Story" content={story?.moral_message} />
       </div>
 
       <div className="pt-4 text-center">
         <button
           onClick={onReset}
-          className="px-8 py-3 text-lg font-semibold text-indigo-600 bg-white border-2 border-indigo-600 rounded-xl hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105"
+          disabled={isLoading}
+          className="px-8 py-3 text-lg font-semibold text-indigo-600 bg-white border-2 border-indigo-600 rounded-xl hover:bg-indigo-50 focus:outline-none focus:ring-4 focus:ring-indigo-300 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Create Another Story
+          {isLoading ? 'Generating...' : 'Create Another Story'}
         </button>
       </div>
     </div>

@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
+  const [view, setView] = useState<'form' | 'output'>('form');
 
   const [user, setUser] = useState<User | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -100,13 +101,6 @@ const App: React.FC = () => {
   }
 
   const startStoryGeneration = useCallback(async () => {
-    if (!topic.trim()) {
-        const formError = new Error("Please enter a topic to generate a story.");
-        formError.name = "Incomplete Form";
-        setError(formError);
-        return;
-    }
-    
     setIsLoading(true);
     setStory(null);
     setAudioUrl(null);
@@ -116,9 +110,6 @@ const App: React.FC = () => {
     try {
       // Step 1: Generate the critical story text first.
       const { story: generatedStory, storyMarkdown } = await generateStory(topic, grade, language, emotion, userRole);
-      
-      // We have the core content! Stop the main loader and display the story.
-      setIsLoading(false);
       setStory(generatedStory);
       
       if (!user) {
@@ -127,16 +118,19 @@ const App: React.FC = () => {
           localStorage.setItem('guestStoryCount', String(newCount));
       }
       
-      // Step 2 & 3: Generate audio and image in the background.
-      generateAudio(storyMarkdown, voice).then(setAudioUrl).catch(audioError => {
+      // Step 2 & 3: Generate audio and image concurrently.
+      const audioPromise = generateAudio(storyMarkdown, voice).then(setAudioUrl).catch(audioError => {
           console.warn("Failed to generate audio, but story is available:", audioError);
           setAudioUrl(null);
       });
       
-      generateImage(generatedStory.title, generatedStory.introduction).then(setImageUrl).catch(imageError => {
+      const imagePromise = generateImage(generatedStory.title, generatedStory.introduction).then(setImageUrl).catch(imageError => {
           console.warn("Failed to generate image, but story is available:", imageError);
           setImageUrl(null);
       });
+
+      // Wait for non-critical assets to finish before setting isLoading to false.
+      await Promise.all([audioPromise, imagePromise]);
 
     } catch (err: any) {
         console.error(err);
@@ -146,10 +140,11 @@ const App: React.FC = () => {
         if (err instanceof AppError) {
             message = err.message;
             if (err instanceof APIError && (message.includes('not configured') || message.toLowerCase().includes('api key'))) {
-                setIsApiKeyReady(false); // Key is bad, reset state
+                setIsApiKeyReady(false);
                 setApiKeyError(message);
+                setView('form'); // Go back to form to show API key modal
                 setIsLoading(false);
-                return; // Stop further error handling; the API modal will appear
+                return;
             }
             if (err instanceof NetworkError) title = "Network Connection Error";
             else if (err instanceof APIError) title = "AI Service Error";
@@ -161,7 +156,8 @@ const App: React.FC = () => {
         const appError = new Error(message);
         appError.name = title;
         setError(appError);
-        setIsLoading(false); // Ensure loader stops on critical error.
+    } finally {
+        setIsLoading(false);
     }
   }, [topic, grade, language, emotion, userRole, voice, user, guestStoryCount]);
   
@@ -181,7 +177,7 @@ const App: React.FC = () => {
               setIsApiKeyReady(true);
               if (wasStoryGenPendingApiKey.current) {
                   wasStoryGenPendingApiKey.current = false;
-                  startStoryGeneration();
+                  handleSubmit(new Event('submit') as unknown as React.FormEvent<HTMLFormElement>);
               }
           } catch (e) {
               console.error("Error or dismissal during API key selection:", e);
@@ -223,6 +219,12 @@ const App: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!topic.trim()) {
+        const formError = new Error("Please enter a topic to generate a story.");
+        formError.name = "Incomplete Form";
+        setError(formError);
+        return;
+    }
     if (!user && guestStoryCount >= 1) {
       wasLoginTriggeredBySubmit.current = true;
       setShowLoginModal(true);
@@ -233,6 +235,7 @@ const App: React.FC = () => {
         handleSelectKey();
         return;
     }
+    setView('output');
     startStoryGeneration();
   };
 
@@ -241,6 +244,7 @@ const App: React.FC = () => {
     setAudioUrl(null);
     setImageUrl(null);
     setTopic('');
+    setView('form');
   };
 
   const renderContent = () => {
@@ -250,11 +254,8 @@ const App: React.FC = () => {
     if (!isApiKeyReady && userRole === 'Student') {
       return <StudentApiKeyMessage />;
     }
-    if (isLoading) {
-      return <Loader />;
-    }
-    if (story) {
-      return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} />;
+    if (view === 'output') {
+      return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} isLoading={isLoading} />;
     }
     return (
       <StoryInputForm
