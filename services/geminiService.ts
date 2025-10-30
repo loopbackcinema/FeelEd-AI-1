@@ -155,6 +155,11 @@ export async function generateStory(
         storyMarkdown += decoder.decode(value, { stream: true });
     }
 
+    // Handle cases where the backend streams an error message (e.g., safety block)
+    if (storyMarkdown.includes('Story generation was blocked')) {
+        throw new StoryGenerationError(storyMarkdown);
+    }
+
     if (!storyMarkdown) {
         throw new StoryGenerationError("The AI didn't generate a story. Please try adjusting your topic.");
     }

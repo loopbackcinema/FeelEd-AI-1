@@ -1,4 +1,3 @@
-
 const { GoogleGenAI, Modality } = require('@google/genai');
 
 // A hard limit on characters for the TTS service to prevent Vercel function timeouts.
@@ -93,7 +92,8 @@ module.exports = async (req, res) => {
             },
         });
         
-        const audioBase64 = audioResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data || null;
+        // FIX: The TTS response has a single part with audio data. Access it directly.
+        const audioBase64 = audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
         if (!audioBase64) {
             console.error('TTS API call succeeded but returned no audio data. Response:', JSON.stringify(audioResponse, null, 2));

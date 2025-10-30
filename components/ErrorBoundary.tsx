@@ -1,5 +1,3 @@
-
-
 import React, { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
@@ -12,14 +10,8 @@ interface State {
 }
 
 class ErrorBoundary extends React.Component<Props, State> {
-  // FIX: Initialize state as a public class field to ensure TypeScript
-  // correctly recognizes the 'state' property on the component instance.
-  // This resolves all type errors within this component and the related
-  // props validation error in index.tsx.
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+  // FIX: Replaced constructor with a state class property to resolve errors where `this.state` and `this.props` were not being recognized by TypeScript. This is a more modern and standard way to initialize state in React class components.
+  public state: State = { hasError: false, error: null };
 
   public static getDerivedStateFromError(error: Error): State {
     // Update state so the next render will show the fallback UI.

@@ -30,7 +30,7 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onRes
   const [isCopied, setIsCopied] = useState(false);
 
   const handleShare = async () => {
-    if (!story || !audioUrl) return;
+    if (!story) return;
 
     const plainText = [
         `Title: ${story.title || 'Untitled Story'}`,
@@ -100,7 +100,7 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, onRes
              <div className="flex-shrink-0">
                 <button
                     onClick={handleShare}
-                    disabled={!audioUrl}
+                    disabled={!story}
                     aria-label="Share Story"
                     className={`min-w-[95px] h-11 flex items-center justify-center px-4 rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${
                         isCopied
