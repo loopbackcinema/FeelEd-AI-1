@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryInputForm } from './components/StoryInputForm';
 import { StoryOutput } from './components/StoryOutput';
@@ -11,8 +8,8 @@ import { LoginModal } from './components/LoginModal';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { StudentApiKeyMessage } from './components/StudentApiKeyMessage';
 import { generateStory, generateAudio, generateImage } from './services/geminiService';
-// FIX: Import AIStudio from types.ts to resolve a TypeScript type conflict.
-import type { Story, User, AIStudio } from './types';
+// FIX: The AIStudio global type is now declared in types.ts to prevent conflicts.
+import type { Story, User } from './types';
 import { AppError, APIError, NetworkError, StoryGenerationError, TTSError } from './types';
 import { GRADES, LANGUAGES, EMOTIONS, USER_ROLES, TTS_VOICES } from './constants';
 
@@ -27,13 +24,6 @@ interface GoogleJwtPayload {
 //     hasSelectedApiKey: () => Promise<boolean>;
 //     openSelectKey: () => Promise<void>;
 // }
-
-declare global {
-    interface Window {
-        google: any;
-        aistudio?: AIStudio;
-    }
-}
 
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
