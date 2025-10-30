@@ -8,6 +8,7 @@ interface StoryOutputProps {
   imageUrl: string | null;
   onReset: () => void;
   isLoading: boolean;
+  audioState: 'idle' | 'loading' | 'success' | 'failed';
 }
 
 const StorySection: React.FC<{ title: string; content?: string }> = ({ title, content }) => (
@@ -26,7 +27,7 @@ const StorySection: React.FC<{ title: string; content?: string }> = ({ title, co
 );
 
 
-export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, imageUrl, onReset, isLoading }) => {
+export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, imageUrl, onReset, isLoading, audioState }) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleShare = async () => {
@@ -88,16 +89,22 @@ export const StoryOutput: React.FC<StoryOutputProps> = ({ story, audioUrl, image
          <div className="flex items-center justify-between gap-4">
             <div className="flex-grow">
                  <h3 className="text-lg font-semibold text-gray-800 mb-3 text-center sm:text-left">Listen to the Story</h3>
-                {audioUrl ? (
+                {audioState === 'loading' && (
+                    <div className="flex items-center justify-center sm:justify-start space-x-3 py-2">
+                        <div className="w-4 h-4 bg-gray-300 rounded-full animate-pulse"></div>
+                        <div className="w-4 h-4 bg-gray-300 rounded-full animate-pulse [animation-delay:0.2s]"></div>
+                        <div className="w-4 h-4 bg-gray-300 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+                        <p className="text-gray-500">Generating narration...</p>
+                    </div>
+                )}
+                {audioState === 'success' && audioUrl && (
                     <audio controls src={audioUrl} className="w-full">
                     Your browser does not support the audio element.
                     </audio>
-                ) : (
-                    <div className="flex items-center justify-center sm:justify-start space-x-3 py-2">
-                         <div className="w-4 h-4 bg-gray-300 rounded-full animate-pulse"></div>
-                         <div className="w-4 h-4 bg-gray-300 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-                         <div className="w-4 h-4 bg-gray-300 rounded-full animate-pulse [animation-delay:0.4s]"></div>
-                         <p className="text-gray-500">Generating narration...</p>
+                )}
+                {audioState === 'failed' && (
+                    <div className="flex items-center justify-center sm:justify-start py-2">
+                        <p className="text-sm text-red-600">Audio narration could not be created.</p>
                     </div>
                 )}
             </div>

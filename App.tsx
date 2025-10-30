@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [view, setView] = useState<'form' | 'output'>('form');
+  const [audioState, setAudioState] = useState<'idle' | 'loading' | 'success' | 'failed'>('idle');
 
   const [user, setUser] = useState<User | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -101,11 +102,13 @@ const App: React.FC = () => {
   }
 
   const startStoryGeneration = useCallback(async () => {
+    setView('output');
     setIsLoading(true);
     setStory(null);
     setAudioUrl(null);
     setImageUrl(null);
     setApiKeyError(null); // Clear previous key errors on a new attempt
+    setAudioState('loading');
 
     try {
       // Step 1: Generate the critical story text first.
@@ -119,9 +122,9 @@ const App: React.FC = () => {
       }
       
       // Step 2 & 3: Generate audio and image concurrently.
-      const audioPromise = generateAudio(storyMarkdown, voice).then(setAudioUrl).catch(audioError => {
-          console.warn("Failed to generate audio, but story is available:", audioError);
-          setAudioUrl(null);
+      const audioPromise = generateAudio(storyMarkdown, voice).then(url => {
+          setAudioUrl(url);
+          setAudioState(url ? 'success' : 'failed');
       });
       
       const imagePromise = generateImage(generatedStory.title, generatedStory.introduction).then(setImageUrl).catch(imageError => {
@@ -136,6 +139,8 @@ const App: React.FC = () => {
         console.error(err);
         let title = "An Unexpected Error Occurred";
         let message = "Something went wrong. Please try again.";
+
+        setAudioState('failed');
 
         if (err instanceof AppError) {
             message = err.message;
@@ -235,7 +240,6 @@ const App: React.FC = () => {
         handleSelectKey();
         return;
     }
-    setView('output');
     startStoryGeneration();
   };
 
@@ -244,6 +248,7 @@ const App: React.FC = () => {
     setAudioUrl(null);
     setImageUrl(null);
     setTopic('');
+    setAudioState('idle');
     setView('form');
   };
 
@@ -255,7 +260,7 @@ const App: React.FC = () => {
       return <StudentApiKeyMessage />;
     }
     if (view === 'output') {
-      return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} isLoading={isLoading} />;
+      return <StoryOutput story={story} audioUrl={audioUrl} imageUrl={imageUrl} onReset={handleReset} isLoading={isLoading} audioState={audioState} />;
     }
     return (
       <StoryInputForm

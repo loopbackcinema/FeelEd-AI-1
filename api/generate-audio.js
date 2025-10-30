@@ -1,4 +1,3 @@
-
 const { GoogleGenAI, Modality } = require('@google/genai');
 
 async function allowCors(req, res) {
@@ -52,8 +51,25 @@ module.exports = async (req, res) => {
         const emotion = emotionMatch ? emotionMatch[1] : 'neutral';
         
         const ttsPrompt = `Read the following story in a ${emotion} tone.`;
-        // We remove the markdown headings for a smoother narration
-        const fullTextForTTS = `${ttsPrompt}\n\n${storyMarkdown.replace(/^#\s+.*$/gm, '')}`;
+        
+        // Clean the markdown to get only the story content for narration.
+        // This removes markdown headings, the user request block, and extra newlines,
+        // which makes the TTS request faster and more reliable.
+        let cleanStoryText = storyMarkdown;
+
+        // 1. Remove the user request block if it exists
+        const requestBlockIndex = cleanStoryText.indexOf('---');
+        if (requestBlockIndex !== -1) {
+            cleanStoryText = cleanStoryText.substring(0, requestBlockIndex);
+        }
+
+        // 2. Remove all markdown heading lines (e.g., # Title:)
+        cleanStoryText = cleanStoryText.replace(/^#\s+[^:\n]+:?\s*\n/gm, '');
+
+        // 3. Trim whitespace and collapse multiple newlines into a maximum of two
+        cleanStoryText = cleanStoryText.trim().replace(/\n{3,}/g, '\n\n');
+
+        const fullTextForTTS = `${ttsPrompt}\n\n${cleanStoryText}`;
 
         const audioResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
